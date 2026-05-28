@@ -135,4 +135,4 @@ Este enfoque matemático dinámico previene pérdidas financieras y cuadra al ce
 
 ## 👥 Autor
 
-*   **Tu Nombre** - *Desarrollo de Software y Diseño de Sistemas* - [GitHub](https://github.com/tu-usuario)
+*   **Gino Cotos** - *Desarrollo de Software y Diseño de Sistemas* - [GitHub](https://github.com/tu-usuario)
