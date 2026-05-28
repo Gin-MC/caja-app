@@ -1,0 +1,213 @@
+---
+---
+<div class="cash-counter-container">
+  <div class="table-header-row">
+    <div class="header-titles">
+      <h2>Arqueo de Efectivo Físico</h2>
+      <p class="subtitle">Conteo de monedas y billetes en caja física para el cierre del día</p>
+    </div>
+  </div>
+
+  <div class="cash-grid">
+    <!-- Coins Card -->
+    <div class="table-card">
+      <div class="card-header border-coins">
+        <h3>Monedas</h3>
+        <span class="badge">Soles (S/.)</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Denominación</th>
+              <th>Cantidad</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-coins">
+            <!-- Coins generated dynamically -->
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <span>Total Monedas:</span>
+        <strong id="total-coins">S/. 0.00</strong>
+      </div>
+    </div>
+
+    <!-- Bills Card -->
+    <div class="table-card">
+      <div class="card-header border-bills">
+        <h3>Billetes</h3>
+        <span class="badge">Soles (S/.)</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Denominación</th>
+              <th>Cantidad</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-bills">
+            <!-- Bills generated dynamically -->
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <span>Total Billetes:</span>
+        <strong id="total-bills">S/. 0.00</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  .cash-counter-container {
+    width: 100%;
+    margin-bottom: 2.5rem;
+  }
+
+  .cash-counter-container .table-header-row {
+    margin-bottom: 1.25rem;
+  }
+
+  .cash-counter-container .header-titles h2 {
+    font-size: 1.35rem;
+    color: var(--color-dark);
+  }
+
+  .cash-counter-container .subtitle {
+    font-size: 0.85rem;
+    color: var(--color-dark-muted);
+  }
+
+  .cash-counter-container .cash-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .cash-counter-container .cash-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .cash-counter-container .table-card {
+    background-color: var(--color-white);
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 4px 15px var(--color-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cash-counter-container .card-header {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .cash-counter-container .card-header h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .cash-counter-container .border-coins { border-top: 5px solid #16A085; }
+  .cash-counter-container .border-bills { border-top: 5px solid #27AE60; }
+
+  .cash-counter-container .badge {
+    background-color: var(--color-cream);
+    color: var(--color-dark-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+  }
+
+  .cash-counter-container .table-wrapper {
+    flex: 1;
+  }
+
+  .cash-counter-container table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  .cash-counter-container th {
+    background-color: var(--color-cream);
+    text-align: center;
+    padding: 0.75rem 1rem;
+    color: var(--color-dark-muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .cash-counter-container td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-cream-dark);
+    vertical-align: middle;
+    text-align: center;
+  }
+
+  .cash-counter-container .denom-label {
+    font-weight: 600;
+    color: var(--color-dark);
+    text-align: center;
+  }
+
+  .cash-counter-container .cash-qty-input {
+    width: 90px;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    font-family: var(--font-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    outline: none;
+    background-color: var(--color-cream);
+    transition: var(--transition-smooth);
+    text-align: center;
+  }
+
+  .cash-counter-container .cash-qty-input:focus {
+    border-color: var(--color-orange);
+    background-color: var(--color-white);
+  }
+
+  /* Remove default spinner on number inputs */
+  .cash-counter-container .cash-qty-input::-webkit-outer-spin-button,
+  .cash-counter-container .cash-qty-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .cash-counter-container .subtotal-val {
+    font-weight: 700;
+    color: var(--color-dark);
+    text-align: center;
+    display: block;
+  }
+
+  .cash-counter-container .card-footer {
+    padding: 1.25rem 1.5rem;
+    background-color: var(--color-cream);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+  }
+
+  .cash-counter-container .card-footer strong {
+    font-size: 1.1rem;
+    color: var(--color-dark);
+  }
+</style>

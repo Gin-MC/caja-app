@@ -1,0 +1,1313 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Header from "../components/Header.astro";
+import ExcelUploader from "../components/ExcelUploader.astro";
+import SalesSummaryTable from "../components/SalesSummaryTable.astro";
+import BankTransfersTable from "../components/BankTransfersTable.astro";
+import CashCounter from "../components/CashCounter.astro";
+import ReconciliationSummary from "../components/ReconciliationSummary.astro";
+import ConfirmationModal from "../components/ConfirmationModal.astro";
+import NewDocumentModal from "../components/NewDocumentModal.astro";
+---
+
+<Layout title="Plastiluz - Reconciliación de Caja Diaria">
+  <Header />
+
+  <main class="app-main">
+    <div class="app-container">
+      <!-- Logo in Main Panel for aesthetic welcome -->
+      <div id="welcome-panel" class="welcome-panel">
+        <div class="welcome-box">
+          <div class="brand-badge">Sistema de Cuadre de Caja</div>
+          <h1>Simplifica el Cierre Diario</h1>
+          <p>
+            Carga el reporte de ventas de Plastiluz para cruzar automáticamente
+            las notas de venta, boletas y facturas contra las transferencias
+            bancarias y el arqueo de efectivo físico.
+          </p>
+        </div>
+      </div>
+
+      <!-- File Uploader Component -->
+      <ExcelUploader />
+
+      <!-- Workspace Area (Hidden until file is loaded) -->
+      <div id="workspace-area" class="workspace-area hidden">
+        <!-- Sales Summary Section -->
+        <SalesSummaryTable />
+
+        <!-- Bank Transfers Section -->
+        <BankTransfersTable />
+
+        <!-- Cash Inventory Count -->
+        <CashCounter />
+
+        <!-- Final Reconciliation Dashboard -->
+        <ReconciliationSummary />
+      </div>
+    </div>
+  </main>
+
+  <!-- Modals -->
+  <ConfirmationModal />
+  <NewDocumentModal />
+</Layout>
+
+<style>
+  .app-main {
+    max-width: 1400px;
+    margin: 2rem auto;
+    padding: 0 2rem;
+  }
+
+  .app-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .welcome-panel {
+    background: linear-gradient(135deg, #fffdf9 0%, #f5efe6 100%);
+    border: 1px solid var(--color-border);
+    border-radius: 24px;
+    padding: 3rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 20px var(--color-shadow);
+    background-image: radial-gradient(
+      rgba(230, 126, 34, 0.03) 1px,
+      transparent 1px
+    );
+    background-size: 24px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .welcome-panel::after {
+    content: "";
+    position: absolute;
+    bottom: -50px;
+    right: -50px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(
+      circle,
+      rgba(230, 126, 34, 0.05) 0%,
+      transparent 70%
+    );
+    border-radius: 50%;
+  }
+
+  .welcome-box {
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .brand-badge {
+    background-color: var(--color-orange);
+    color: var(--color-white);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 0.4rem 0.9rem;
+    border-radius: 30px;
+    box-shadow: 0 4px 10px rgba(230, 126, 34, 0.2);
+  }
+
+  .welcome-box h1 {
+    font-size: 2.5rem;
+    line-height: 1.15;
+    letter-spacing: -1px;
+    color: var(--color-dark);
+  }
+
+  .welcome-box p {
+    font-size: 1rem;
+    color: var(--color-dark-muted);
+    font-weight: 500;
+  }
+
+  .workspace-area {
+    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(15px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .app-main {
+      padding: 0 1rem;
+      margin: 1rem auto;
+    }
+    .welcome-panel {
+      padding: 1.5rem;
+    }
+    .welcome-box h1 {
+      font-size: 1.8rem;
+    }
+  }
+
+  .hidden {
+    display: none !important;
+  }
+</style>
+
+<script>
+  import { parseDailyReport } from "../js/excelParser.js";
+  import { exportToExcel } from "../js/excelExporter.js";
+
+  // --- STATE SYSTEM ---
+  interface DocumentItem {
+    id: string;
+    rawTipo: string;
+    type: "NV" | "BOLETA" | "FACTURA" | "NC";
+    serie: string;
+    numero: string;
+    fecha: string;
+    codigo: string;
+    nombre: string;
+    importe: number;
+    metodoPago: "efectivo" | "banco" | "credito";
+    verificado?: string;
+    nroOperacion?: string;
+    hora?: string;
+  }
+
+  interface BankTransferItem {
+    id: string;
+    docId: string; // bound main document ID (can be empty for manual additions)
+    fecha: string;
+    type: "NV" | "BOLETA" | "FACTURA" | "NC" | string;
+    serie: string;
+    numero: string;
+    importe: number;
+    nroOperacion: string;
+    hora: string;
+    verificado: string;
+  }
+
+  interface CashDenomination {
+    value: number;
+    quantity: number | null;
+    total: number;
+  }
+
+  interface CashAdjustmentItem {
+    id: string;
+    description: string;
+    amount: number;
+  }
+
+  interface AppState {
+    date: Date;
+    fileName: string;
+    documents: DocumentItem[];
+    bankTransfers: BankTransferItem[];
+    cashCount: CashDenomination[];
+    cashAdjustments: CashAdjustmentItem[];
+  }
+
+  const initialCoins = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0];
+  const initialBills = [10.0, 20.0, 50.0, 100.0, 200.0];
+
+  const state: AppState = {
+    date: new Date(),
+    fileName: "",
+    documents: [],
+    bankTransfers: [],
+    cashCount: [
+      ...initialCoins.map((v) => ({ value: v, quantity: null, total: 0 })),
+      ...initialBills.map((v) => ({ value: v, quantity: null, total: 0 })),
+    ],
+    cashAdjustments: [],
+  };
+
+  // --- DOM REFERENCES ---
+  const dropzone = document.getElementById("dropzone") as HTMLDivElement;
+  const fileInput = document.getElementById("file-input") as HTMLInputElement;
+  const loadingIndicator = document.getElementById(
+    "file-loading-indicator",
+  ) as HTMLDivElement;
+  const fileBadge = document.getElementById(
+    "loaded-file-badge",
+  ) as HTMLDivElement;
+  const fileNameSpan = document.getElementById(
+    "loaded-file-name",
+  ) as HTMLSpanElement;
+  const fileDateSpan = document.getElementById(
+    "loaded-file-date",
+  ) as HTMLSpanElement;
+  const clearFileBtn = document.getElementById(
+    "clear-file-btn",
+  ) as HTMLButtonElement;
+  const workspaceArea = document.getElementById(
+    "workspace-area",
+  ) as HTMLDivElement;
+  const welcomePanel = document.getElementById(
+    "welcome-panel",
+  ) as HTMLDivElement;
+
+  // Confirmation modal refs
+  const confirmModal = document.getElementById(
+    "confirm-modal",
+  ) as HTMLDivElement;
+  const confirmTitle = document.getElementById(
+    "confirm-title",
+  ) as HTMLHeadingElement;
+  const confirmMsg = document.getElementById(
+    "confirm-message",
+  ) as HTMLParagraphElement;
+  const confirmCancelBtn = document.getElementById(
+    "confirm-cancel-btn",
+  ) as HTMLButtonElement;
+  const confirmOkBtn = document.getElementById(
+    "confirm-ok-btn",
+  ) as HTMLButtonElement;
+
+  // New document modal refs
+  const newDocModal = document.getElementById(
+    "new-doc-modal",
+  ) as HTMLDivElement;
+  const openNewDocBtn = document.getElementById(
+    "add-doc-btn",
+  ) as HTMLButtonElement;
+  const closeNewDocBtn = document.getElementById(
+    "close-new-doc-btn",
+  ) as HTMLButtonElement;
+  const cancelNewDocBtn = document.getElementById(
+    "new-doc-cancel-btn",
+  ) as HTMLButtonElement;
+  const newDocForm = document.getElementById("new-doc-form") as HTMLFormElement;
+
+  // Add bank row button
+  const addBankRowBtn = document.getElementById(
+    "add-bank-row-btn",
+  ) as HTMLButtonElement;
+
+  // Export Bton
+  const exportExcelBtn = document.getElementById(
+    "export-excel-btn",
+  ) as HTMLButtonElement;
+
+  // --- UNIVERSAL CONFIRMATION DIALOG ---
+  let onConfirmOkCallback: (() => void) | null = null;
+
+  function askConfirmation(title: string, message: string, onOk: () => void) {
+    confirmTitle.textContent = title;
+    confirmMsg.textContent = message;
+    onConfirmOkCallback = onOk;
+    confirmModal.classList.remove("hidden");
+  }
+
+  confirmCancelBtn.addEventListener("click", () => {
+    confirmModal.classList.add("hidden");
+    onConfirmOkCallback = null;
+  });
+
+  confirmOkBtn.addEventListener("click", () => {
+    if (onConfirmOkCallback) {
+      onConfirmOkCallback();
+    }
+    confirmModal.classList.add("hidden");
+    onConfirmOkCallback = null;
+  });
+
+  // --- NEW DOCUMENT DIALOG HANDLERS ---
+  openNewDocBtn.addEventListener("click", () => {
+    newDocForm.reset();
+    newDocModal.classList.remove("hidden");
+  });
+
+  const closeNewDocModal = () => newDocModal.classList.add("hidden");
+  closeNewDocBtn.addEventListener("click", closeNewDocModal);
+  cancelNewDocBtn.addEventListener("click", closeNewDocModal);
+
+  newDocForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+
+    const selectedType = (
+      document.getElementById("doc-type") as HTMLSelectElement
+    ).value;
+    const numberInput = (
+      document.getElementById("doc-number") as HTMLInputElement
+    ).value.trim();
+    const amount = parseFloat(
+      (document.getElementById("doc-amount") as HTMLInputElement).value,
+    );
+    const payment = (
+      document.getElementById("doc-payment") as HTMLSelectElement
+    ).value as any;
+
+    if (!numberInput || isNaN(amount)) return;
+
+    // Map selected type to standard type and default serie
+    let type: "NV" | "BOLETA" | "FACTURA" | "NC" = "NV";
+    let rawTipo = "NV";
+    let defaultSerie = "NV01";
+
+    if (selectedType === "NV") {
+      type = "NV";
+      rawTipo = "NV";
+      defaultSerie = "NV01";
+    } else if (selectedType === "BOLETA") {
+      type = "BOLETA";
+      rawTipo = "03";
+      defaultSerie = "B001";
+    } else if (selectedType === "FACTURA") {
+      type = "FACTURA";
+      rawTipo = "01";
+      defaultSerie = "F001";
+    } else if (selectedType === "NC_BOLETA") {
+      type = "NC";
+      rawTipo = "07";
+      defaultSerie = "BC01";
+    } else if (selectedType === "NC_FACTURA") {
+      type = "NC";
+      rawTipo = "07";
+      defaultSerie = "FC01";
+    }
+
+    // Parse manually-typed series if present (e.g., BC01-000767)
+    let serie = defaultSerie;
+    let numero = numberInput;
+    if (numberInput.includes("-")) {
+      const parts = numberInput.split("-");
+      serie = parts[0].trim().toUpperCase();
+      numero = parts.slice(1).join("-").trim();
+    }
+
+    askConfirmation(
+      "Confirmar adición de documento",
+      `¿Deseas agregar manualmente el comprobante ${type} Nro. ${serie}-${numero} por un monto de S/. ${amount.toFixed(2)}?`,
+      () => {
+        // Create document
+        const newDoc: DocumentItem = {
+          id: `${type}-MANUAL-${Date.now()}`,
+          rawTipo: rawTipo,
+          type: type,
+          serie: serie,
+          numero: numero,
+          fecha: new Date().toISOString().split("T")[0],
+          codigo: "00000000",
+          nombre: "INGRESO MANUAL",
+          importe: amount,
+          metodoPago: payment,
+          verificado: payment === "banco" ? "SI" : "NO",
+          nroOperacion: "",
+          hora: "",
+        };
+
+        state.documents.push(newDoc);
+
+        // Resort documents by number
+        state.documents.sort((a, b) => {
+          const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+          const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+          return numA - numB;
+        });
+
+        closeNewDocModal();
+        renderWorkspace();
+      },
+    );
+  });
+
+  // --- DROPZONE EVENTS ---
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  };
+
+  const handleDragLeave = () => {
+    dropzone.classList.remove("dragover");
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      processFile(files[0]);
+    }
+  };
+
+  dropzone.addEventListener("dragover", handleDragOver);
+  dropzone.addEventListener("dragleave", handleDragLeave);
+  dropzone.addEventListener("drop", handleDrop);
+
+  fileInput.addEventListener("change", () => {
+    const files = fileInput.files;
+    if (files && files.length > 0) {
+      processFile(files[0]);
+    }
+  });
+
+  // --- PROCESS UPLOADED SPREADSHEET ---
+  function processFile(file: File) {
+    dropzone.classList.add("hidden");
+    loadingIndicator.classList.remove("hidden");
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result as ArrayBuffer;
+        const parsed = parseDailyReport(data) as {
+          date: Date;
+          documents: DocumentItem[];
+        };
+
+        // Update state
+        state.date = parsed.date;
+        state.fileName = file.name;
+        state.documents = parsed.documents;
+        state.bankTransfers = []; // clear bank transfers list
+        state.cashAdjustments = []; // clear cash adjustments
+
+        // Reset Cash Count
+        state.cashCount.forEach((c) => {
+          c.quantity = null;
+          c.total = 0;
+        });
+
+        // Smart bank cross matching!
+        // Let's check if the bank transfers list in 'CAJA-PLASTILUZ.xlsx' can be matched,
+        // but since this is a new close, we let the user manually flag and reconciliate.
+        // If there are documents matching the original bank sheet, we could pre-flag,
+        // but standard is efectivo.
+
+        // Show badge
+        fileNameSpan.textContent = file.name;
+        const options: Intl.DateTimeFormatOptions = {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        };
+        fileDateSpan.textContent = `Reporte del: ${parsed.date.toLocaleDateString("es-PE", options)}`;
+
+        loadingIndicator.classList.add("hidden");
+        fileBadge.classList.remove("hidden");
+        workspaceArea.classList.remove("hidden");
+        welcomePanel.classList.add("hidden");
+
+        // Draw tables
+        renderWorkspace();
+      } catch (err: any) {
+        alert(`Error al procesar el archivo: ${err.message || err}`);
+        clearFile();
+      }
+    };
+    reader.onerror = () => {
+      alert("Error al leer el archivo.");
+      clearFile();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // --- RESET STATE ---
+  function clearFile() {
+    state.documents = [];
+    state.bankTransfers = [];
+    state.cashAdjustments = [];
+    state.fileName = "";
+    fileInput.value = "";
+
+    fileBadge.classList.add("hidden");
+    workspaceArea.classList.add("hidden");
+    loadingIndicator.classList.add("hidden");
+    dropzone.classList.remove("hidden");
+    welcomePanel.classList.remove("hidden");
+  }
+
+  clearFileBtn.addEventListener("click", () => {
+    askConfirmation(
+      "Confirmar reinicio",
+      "¿Estás seguro de que quieres limpiar la sesión actual? Se perderán todas las modificaciones y el conteo de efectivo actual.",
+      clearFile,
+    );
+  });
+
+  // --- ADD MANUAL BANK ROW ---
+  addBankRowBtn.addEventListener("click", () => {
+    // Add a new empty/manual bank transfer row
+    state.bankTransfers.push({
+      id: `manual-bcp-${Date.now()}`,
+      docId: "", // not bound to a document
+      fecha: new Date(state.date).toISOString().split("T")[0],
+      type: "BOLETA", // default
+      serie: "B001",
+      numero: "",
+      importe: 0,
+      nroOperacion: "",
+      hora: "",
+      verificado: "SI",
+    });
+
+    renderWorkspace();
+  });
+
+  // --- ADD CASH ADJUSTMENT CONCEPT ---
+  document
+    .getElementById("add-adjustment-btn")
+    ?.addEventListener("click", () => {
+      state.cashAdjustments.push({
+        id: `adj-${Date.now()}`,
+        description: "",
+        amount: 0,
+      });
+      renderWorkspace();
+    });
+
+  // --- RENDERING WORKSPACE ---
+  function renderWorkspace() {
+    renderSalesSummary();
+    renderBankTransfers();
+    renderCashCount();
+    renderCashAdjustments();
+    renderCalculations();
+  }
+
+  // Render main tables
+  function renderSalesSummary() {
+    const tbodyNv = document.getElementById(
+      "tbody-nv",
+    ) as HTMLTableSectionElement;
+    const tbodyBoleta = document.getElementById(
+      "tbody-boleta",
+    ) as HTMLTableSectionElement;
+    const tbodyFactura = document.getElementById(
+      "tbody-factura",
+    ) as HTMLTableSectionElement;
+
+    // Sort documents: NCs always go at the end of their lists, others sorted ascending
+    state.documents.sort((a, b) => {
+      if (a.type === "NC" && b.type !== "NC") return 1;
+      if (a.type !== "NC" && b.type === "NC") return -1;
+      const numA = parseInt(a.numero.replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt(b.numero.replace(/\D/g, ""), 10) || 0;
+      return numA - numB;
+    });
+
+    // Filters & Classifications (Group NC directly into their respective columns)
+    const nvs = state.documents.filter((d) => d.type === "NV");
+
+    // Boletas include normal Boletas and Credit Notes with Series starting with B (e.g. BC01)
+    const boletas = state.documents.filter(
+      (d) =>
+        d.type === "BOLETA" ||
+        (d.type === "NC" && d.serie.toUpperCase().startsWith("B")),
+    );
+
+    // Facturas include normal Facturas and Credit Notes with Series starting with F (e.g. FC01)
+    const facturas = state.documents.filter(
+      (d) =>
+        d.type === "FACTURA" ||
+        (d.type === "NC" && d.serie.toUpperCase().startsWith("F")),
+    );
+
+    // Counts
+    document.getElementById("count-nv")!.textContent =
+      `${nvs.length} comprobantes`;
+    document.getElementById("count-boleta")!.textContent =
+      `${boletas.length} comprobantes`;
+    document.getElementById("count-factura")!.textContent =
+      `${facturas.length} comprobantes`;
+
+    const buildRows = (
+      list: DocumentItem[],
+      tbody: HTMLTableSectionElement,
+    ) => {
+      tbody.innerHTML = "";
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No hay comprobantes cargados</td></tr>`;
+        return;
+      }
+
+      list.forEach((doc) => {
+        const tr = document.createElement("tr");
+
+        // Color row based on payment method or document type (NC)
+        if (doc.type === "NC") {
+          tr.className = "payment-nc";
+        } else if (doc.metodoPago === "banco") {
+          tr.className = "payment-banco";
+        } else if (doc.metodoPago === "credito") {
+          tr.className = "payment-credito";
+        }
+
+        // Document identifier (Show full series-number if NC, else just number)
+        const tdNum = document.createElement("td");
+        tdNum.className = "doc-num";
+        tdNum.textContent =
+          doc.type === "NC" ? `${doc.serie}-${doc.numero}` : doc.numero;
+        tr.appendChild(tdNum);
+
+        // Amount input (editable)
+        const tdAmount = document.createElement("td");
+        tdAmount.className = "text-right";
+        const inputAmount = document.createElement("input");
+        inputAmount.type = "number";
+        inputAmount.step = "0.01";
+        inputAmount.className = "doc-amount-input";
+
+        // Display NC as negative or positive? In UI let's show positive value with minus or actual positive but red colored. Let's make it display normal positive but formatted nicely
+        inputAmount.value = doc.importe.toFixed(2);
+
+        // Modify amount requires confirmation
+        inputAmount.addEventListener("change", () => {
+          const newVal = parseFloat(inputAmount.value);
+          if (isNaN(newVal) || newVal < 0) {
+            inputAmount.value = doc.importe.toFixed(2);
+            return;
+          }
+
+          const docName =
+            doc.type === "NC" ? `${doc.serie}-${doc.numero}` : doc.numero;
+          askConfirmation(
+            "Confirmar modificación de monto",
+            `¿Estás seguro de modificar el monto del comprobante ${docName} de S/. ${doc.importe.toFixed(2)} a S/. ${newVal.toFixed(2)}?`,
+            () => {
+              doc.importe = newVal;
+
+              // Sync BCP list transfer amount too
+              const relatedTransfer = state.bankTransfers.find(
+                (t) => t.docId === doc.id,
+              );
+              if (relatedTransfer) {
+                relatedTransfer.importe = newVal;
+              }
+
+              renderWorkspace();
+            },
+          );
+        });
+        tdAmount.appendChild(inputAmount);
+        tr.appendChild(tdAmount);
+
+        // Payment selector
+        const tdPayment = document.createElement("td");
+        tdPayment.className = "text-center";
+        const selectPayment = document.createElement("select");
+        selectPayment.className = `payment-select ${doc.metodoPago}`;
+        selectPayment.innerHTML = `
+          <option value="efectivo" ${doc.metodoPago === "efectivo" ? "selected" : ""}>Efectivo</option>
+          <option value="banco" ${doc.metodoPago === "banco" ? "selected" : ""}>Banco</option>
+          <option value="credito" ${doc.metodoPago === "credito" ? "selected" : ""}>Crédito</option>
+        `;
+
+        // NO CONFIRMATION ON PAYMENT METHOD CHANGE AS USER REQUESTED!
+        selectPayment.addEventListener("change", () => {
+          const newMethod = selectPayment.value as any;
+          doc.metodoPago = newMethod;
+
+          // Sync independent BCP transfer row
+          if (newMethod === "banco") {
+            const exists = state.bankTransfers.some((t) => t.docId === doc.id);
+            if (!exists) {
+              state.bankTransfers.push({
+                id: `bcp-${doc.id}-${Date.now()}`,
+                docId: doc.id,
+                fecha:
+                  doc.fecha || new Date(state.date).toISOString().split("T")[0],
+                type: doc.type,
+                serie: doc.serie,
+                numero: doc.numero,
+                importe: doc.importe,
+                nroOperacion: "",
+                hora: "",
+                verificado: "SI",
+              });
+            }
+          } else {
+            // Remove transfer rows associated with this document
+            state.bankTransfers = state.bankTransfers.filter(
+              (t) => t.docId !== doc.id,
+            );
+          }
+
+          renderWorkspace();
+        });
+        tdPayment.appendChild(selectPayment);
+        tr.appendChild(tdPayment);
+
+        // Action delete button
+        const tdActions = document.createElement("td");
+        tdActions.className = "action-buttons";
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "btn-icon delete";
+        deleteBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
+        `;
+        deleteBtn.addEventListener("click", () => {
+          const docName =
+            doc.type === "NC" ? `${doc.serie}-${doc.numero}` : doc.numero;
+          askConfirmation(
+            "Confirmar eliminación",
+            `¿Estás seguro de eliminar el comprobante ${docName} (Importe S/. ${doc.importe.toFixed(2)}) del reporte diario?`,
+            () => {
+              state.documents = state.documents.filter((d) => d.id !== doc.id);
+              state.bankTransfers = state.bankTransfers.filter(
+                (t) => t.docId !== doc.id,
+              );
+              renderWorkspace();
+            },
+          );
+        });
+        tdActions.appendChild(deleteBtn);
+        tr.appendChild(tdActions);
+
+        tbody.appendChild(tr);
+      });
+    };
+
+    buildRows(nvs, tbodyNv);
+    buildRows(boletas, tbodyBoleta);
+    buildRows(facturas, tbodyFactura);
+
+    // Sum Footers (Subtract credit notes!)
+    const sumNvsVal = nvs.reduce(
+      (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+      0,
+    );
+    const sumBoletasVal = boletas.reduce(
+      (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+      0,
+    );
+    const sumFacturasVal = facturas.reduce(
+      (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+      0,
+    );
+
+    document.getElementById("total-nv")!.textContent =
+      `S/. ${sumNvsVal.toFixed(2)}`;
+    document.getElementById("total-boleta")!.textContent =
+      `S/. ${sumBoletasVal.toFixed(2)}`;
+    document.getElementById("total-factura")!.textContent =
+      `S/. ${sumFacturasVal.toFixed(2)}`;
+  }
+
+  // Render Bank Transfers
+  function renderBankTransfers() {
+    const tbodyBank = document.getElementById(
+      "tbody-bank",
+    ) as HTMLTableSectionElement;
+    const bankTransfs = state.bankTransfers;
+
+    tbodyBank.innerHTML = "";
+
+    if (bankTransfs.length === 0) {
+      tbodyBank.innerHTML = `<tr><td colspan="8" class="empty-state">No hay transferencias registradas. Marca algún comprobante en el Resumen de Ventas como 'Banco BCP' o agrega una fila.</td></tr>`;
+      document.getElementById("total-bank-transfers")!.textContent = `S/. 0.00`;
+      return;
+    }
+
+    bankTransfs.forEach((transfer) => {
+      const tr = document.createElement("tr");
+
+      // Fecha (Editable text input!)
+      const tdDate = document.createElement("td");
+      tdDate.className = "text-center";
+      const inputDate = document.createElement("input");
+      inputDate.type = "text";
+      inputDate.className = "bank-input date-input";
+      inputDate.value = transfer.fecha;
+      inputDate.addEventListener("input", () => {
+        transfer.fecha = inputDate.value;
+      });
+      tdDate.appendChild(inputDate);
+      tr.appendChild(tdDate);
+
+      // Tipo (Editable select)
+      const tdType = document.createElement("td");
+      tdType.className = "text-center";
+      const selectType = document.createElement("select");
+      selectType.className = "bank-type-select";
+      selectType.innerHTML = `
+        <option value="BOLETA" ${transfer.type === "BOLETA" ? "selected" : ""}>Boleta</option>
+        <option value="FACTURA" ${transfer.type === "FACTURA" ? "selected" : ""}>Factura</option>
+        <option value="NV" ${transfer.type === "NV" ? "selected" : ""}>NV</option>
+        <option value="NC" ${transfer.type === "NC" ? "selected" : ""}>NC</option>
+      `;
+      selectType.addEventListener("change", () => {
+        transfer.type = selectType.value;
+        renderWorkspace();
+      });
+      tdType.appendChild(selectType);
+      tr.appendChild(tdType);
+
+      // Document Nro (Editable text input!)
+      const tdNum = document.createElement("td");
+      tdNum.className = "text-center";
+      const inputNum = document.createElement("input");
+      inputNum.type = "text";
+      inputNum.className = "bank-input";
+      inputNum.value = transfer.serie
+        ? `${transfer.serie}-${transfer.numero}`
+        : transfer.numero;
+      inputNum.addEventListener("input", () => {
+        const parts = inputNum.value.split("-");
+        if (parts.length > 1) {
+          transfer.serie = parts[0].trim();
+          transfer.numero = parts.slice(1).join("-").trim();
+        } else {
+          transfer.serie = "";
+          transfer.numero = parts[0].trim();
+        }
+      });
+      tdNum.appendChild(inputNum);
+      tr.appendChild(tdNum);
+
+      // Amount (Editable number input as user requested!)
+      const tdAmount = document.createElement("td");
+      tdAmount.className = "text-right";
+      const inputAmount = document.createElement("input");
+      inputAmount.type = "number";
+      inputAmount.step = "0.01";
+      inputAmount.className = "bank-amount-input";
+      inputAmount.value = transfer.importe.toFixed(2);
+      inputAmount.addEventListener("input", () => {
+        const val = parseFloat(inputAmount.value);
+        transfer.importe = isNaN(val) || val < 0 ? 0 : val;
+        renderWorkspaceTotalsOnly(); // recalculate sums in real-time
+      });
+      tdAmount.appendChild(inputAmount);
+      tr.appendChild(tdAmount);
+
+      // # Operacion (input)
+      const tdOp = document.createElement("td");
+      tdOp.className = "text-center";
+      const inputOp = document.createElement("input");
+      inputOp.type = "text";
+      inputOp.className = "bank-input";
+      inputOp.placeholder = "# Operación";
+      inputOp.value = transfer.nroOperacion || "";
+      inputOp.addEventListener("input", () => {
+        transfer.nroOperacion = inputOp.value;
+      });
+      tdOp.appendChild(inputOp);
+      tr.appendChild(tdOp);
+
+      // Hora (input)
+      const tdHour = document.createElement("td");
+      tdHour.className = "text-center";
+      const inputHour = document.createElement("input");
+      inputHour.type = "text";
+      inputHour.className = "bank-input";
+      inputHour.placeholder = "HH:MM";
+      inputHour.value = transfer.hora || "";
+      inputHour.addEventListener("input", () => {
+        transfer.hora = inputHour.value;
+      });
+      tdHour.appendChild(inputHour);
+      tr.appendChild(tdHour);
+
+      // Verification Toggle
+      const tdVerify = document.createElement("td");
+      tdVerify.className = "text-center";
+      const verifyBtn = document.createElement("button");
+      verifyBtn.className = `verify-btn ${transfer.verificado === "SI" ? "verified" : ""}`;
+      verifyBtn.textContent = transfer.verificado || "SI";
+      verifyBtn.addEventListener("click", () => {
+        const nextState = transfer.verificado === "SI" ? "NO" : "SI";
+        transfer.verificado = nextState;
+        verifyBtn.className = `verify-btn ${nextState === "SI" ? "verified" : ""}`;
+        verifyBtn.textContent = nextState;
+      });
+      tdVerify.appendChild(verifyBtn);
+      tr.appendChild(tdVerify);
+
+      // Action delete bank transfer row button
+      const tdDelete = document.createElement("td");
+      tdDelete.className = "action-buttons";
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "btn-icon delete";
+      deleteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      `;
+      deleteBtn.addEventListener("click", () => {
+        askConfirmation(
+          "Confirmar eliminación",
+          `¿Estás seguro de eliminar esta fila de transferencia bancaria por S/. ${transfer.importe.toFixed(2)}?`,
+          () => {
+            state.bankTransfers = state.bankTransfers.filter(
+              (t) => t.id !== transfer.id,
+            );
+            renderWorkspace();
+          },
+        );
+      });
+      tdDelete.appendChild(deleteBtn);
+      tr.appendChild(tdDelete);
+
+      tbodyBank.appendChild(tr);
+    });
+
+    // Subtotal of transfers (subtract NC bank transfers)
+    const totalBankVal = bankTransfs.reduce(
+      (acc, t) => (t.type === "NC" ? acc - t.importe : acc + t.importe),
+      0,
+    );
+    document.getElementById("total-bank-transfers")!.textContent =
+      `S/. ${totalBankVal.toFixed(2)}`;
+  }
+
+  // Render Cash Counts
+  function renderCashCount() {
+    const tbodyCoins = document.getElementById(
+      "tbody-coins",
+    ) as HTMLTableSectionElement;
+    const tbodyBills = document.getElementById(
+      "tbody-bills",
+    ) as HTMLTableSectionElement;
+
+    tbodyCoins.innerHTML = "";
+    tbodyBills.innerHTML = "";
+
+    const coins = state.cashCount.filter((c) => c.value < 10);
+    const bills = state.cashCount.filter((c) => c.value >= 10);
+
+    const makeRows = (
+      list: CashDenomination[],
+      tbody: HTMLTableSectionElement,
+    ) => {
+      list.forEach((denom) => {
+        const tr = document.createElement("tr");
+
+        // Denomination label
+        const tdLabel = document.createElement("td");
+        tdLabel.className = "denom-label text-center";
+        tdLabel.textContent = `S/. ${denom.value.toFixed(2)}`;
+        tr.appendChild(tdLabel);
+
+        // Quantity Input
+        const tdQty = document.createElement("td");
+        tdQty.className = "text-center";
+        const inputQty = document.createElement("input");
+        inputQty.type = "number";
+        inputQty.min = "0";
+        inputQty.className = "cash-qty-input";
+        inputQty.placeholder = "0";
+        inputQty.value = denom.quantity !== null ? String(denom.quantity) : "";
+        inputQty.addEventListener("input", () => {
+          const qty = parseInt(inputQty.value, 10);
+          denom.quantity = isNaN(qty) || qty < 0 ? null : qty;
+          denom.total =
+            denom.quantity !== null ? denom.value * denom.quantity : 0;
+
+          // Refresh subtotal and sums
+          renderWorkspaceTotalsOnly();
+        });
+        tdQty.appendChild(inputQty);
+        tr.appendChild(tdQty);
+
+        // Subtotal output
+        const tdSub = document.createElement("td");
+        tdSub.className = "text-center";
+        const subSpan = document.createElement("span");
+        subSpan.id = `subtotal-${denom.value.toFixed(2)}`;
+        subSpan.className = "subtotal-val";
+        subSpan.textContent = `S/. ${denom.total.toFixed(2)}`;
+        tdSub.appendChild(subSpan);
+        tr.appendChild(tdSub);
+
+        tbody.appendChild(tr);
+      });
+    };
+
+    makeRows(coins, tbodyCoins);
+    makeRows(bills, tbodyBills);
+
+    updateCashTotals();
+  }
+
+  // Live recalculate cash counts without complete redraw
+  function renderWorkspaceTotalsOnly() {
+    state.cashCount.forEach((denom) => {
+      const span = document.getElementById(
+        `subtotal-${denom.value.toFixed(2)}`,
+      );
+      if (span) {
+        span.textContent = `S/. ${denom.total.toFixed(2)}`;
+      }
+    });
+
+    updateCashTotals();
+    renderCalculations();
+  }
+
+  function updateCashTotals() {
+    const coins = state.cashCount.filter((c) => c.value < 10);
+    const bills = state.cashCount.filter((c) => c.value >= 10);
+
+    const sumCoins = coins.reduce((acc, c) => acc + c.total, 0);
+    const sumBills = bills.reduce((acc, c) => acc + c.total, 0);
+
+    document.getElementById("total-coins")!.textContent =
+      `S/. ${sumCoins.toFixed(2)}`;
+    document.getElementById("total-bills")!.textContent =
+      `S/. ${sumBills.toFixed(2)}`;
+  }
+
+  // Render Cash Adjustments (Conceptos)
+  function renderCashAdjustments() {
+    const listContainer = document.getElementById(
+      "adjustments-list",
+    ) as HTMLDivElement;
+    if (!listContainer) return;
+
+    listContainer.innerHTML = "";
+
+    if (state.cashAdjustments.length === 0) {
+      listContainer.innerHTML = `<div style="text-align:center; font-size:0.8rem; color:var(--color-dark-muted); font-style:italic; padding:0.5rem 0;">No hay ingresos o salidas adicionales.</div>`;
+      return;
+    }
+
+    state.cashAdjustments.forEach((adj) => {
+      const row = document.createElement("div");
+      row.className = "adjustment-row";
+
+      const descInput = document.createElement("input");
+      descInput.type = "text";
+      descInput.className = "adj-desc-input";
+      descInput.placeholder = "Ej. Almuerzo del personal";
+      descInput.value = adj.description;
+      descInput.addEventListener("input", () => {
+        adj.description = descInput.value;
+      });
+
+      const amtInput = document.createElement("input");
+      amtInput.type = "number";
+      amtInput.step = "0.01";
+      amtInput.className = "adj-amount-input";
+      amtInput.placeholder = "S/. 0.00";
+      amtInput.value = adj.amount === 0 ? "" : String(adj.amount);
+      amtInput.addEventListener("input", () => {
+        const val = parseFloat(amtInput.value);
+        adj.amount = isNaN(val) ? 0 : val;
+        renderCalculations(); // recalculate sums in real-time
+      });
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn-adj-delete";
+      delBtn.innerHTML = "&times;";
+      delBtn.addEventListener("click", () => {
+        state.cashAdjustments = state.cashAdjustments.filter(
+          (a) => a.id !== adj.id,
+        );
+        renderWorkspace();
+      });
+
+      row.appendChild(descInput);
+      row.appendChild(amtInput);
+      row.appendChild(delBtn);
+
+      listContainer.appendChild(row);
+    });
+  }
+
+  // Render Reconciliation calculations and states
+  function renderCalculations() {
+    const sumNvs = state.documents
+      .filter((d) => d.type === "NV")
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+    const sumBoletas = state.documents
+      .filter(
+        (d) =>
+          d.type === "BOLETA" ||
+          (d.type === "NC" && d.serie.toUpperCase().startsWith("B")),
+      )
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+    const sumFacturas = state.documents
+      .filter(
+        (d) =>
+          d.type === "FACTURA" ||
+          (d.type === "NC" && d.serie.toUpperCase().startsWith("F")),
+      )
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+
+    const salesTotal = sumNvs + sumBoletas + sumFacturas;
+
+    // Bank BCP is the sum of transfers table!
+    const bankTotal = state.bankTransfers.reduce(
+      (acc, t) => (t.type === "NC" ? acc - t.importe : acc + t.importe),
+      0,
+    );
+
+    // Credit total (subtract NC credit sales)
+    const creditTotal = state.documents
+      .filter((d) => d.metodoPago === "credito")
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+
+    // Total cash adjustments (expenses/salidas are negative, extra inflows are positive)
+    const adjTotal = state.cashAdjustments.reduce(
+      (acc, adj) => acc + adj.amount,
+      0,
+    );
+
+    // Expected cash represents theoretical coins and bills: Total - Bank transfers - Credit Sales + Adjustments
+    const expectedCash = salesTotal - bankTotal - creditTotal + adjTotal;
+
+    // Physical Cash sum
+    const actualCash = state.cashCount.reduce((acc, c) => acc + c.total, 0);
+    const actualTotal = bankTotal + actualCash;
+
+    // Sobra/Falta formula = Money Collected (Bank + Physical Cash) - Expected sales (Total Sales - Credit Sales) + Adjustments
+    const difference = actualCash - expectedCash;
+
+    // Set text contents
+    document.getElementById("recon-sales-total")!.textContent =
+      `S/. ${salesTotal.toFixed(2)}`;
+    document.getElementById("recon-bank-total")!.textContent =
+      `S/. ${bankTotal.toFixed(2)}`;
+    document.getElementById("recon-credit-total")!.textContent =
+      `S/. ${creditTotal.toFixed(2)}`;
+    document.getElementById("recon-expected-cash")!.textContent =
+      `S/. ${expectedCash.toFixed(2)}`;
+    document.getElementById("recon-physical-cash")!.textContent =
+      `S/. ${actualCash.toFixed(2)}`;
+    document.getElementById("recon-actual-total")!.textContent =
+      `S/. ${actualTotal.toFixed(2)}`;
+
+    // Set loaded panel state visible
+    document.getElementById("recon-unloaded-state")!.classList.add("hidden");
+    document.getElementById("recon-loaded-state")!.classList.remove("hidden");
+
+    // Render alert box depending on difference
+    const statusCard = document.getElementById(
+      "recon-status-card",
+    ) as HTMLDivElement;
+    const statusTitle = document.getElementById(
+      "recon-status-title",
+    ) as HTMLSpanElement;
+    const statusDiff = document.getElementById(
+      "recon-status-diff",
+    ) as HTMLSpanElement;
+    const statusDesc = document.getElementById(
+      "recon-status-desc",
+    ) as HTMLParagraphElement;
+
+    // Reset status classes
+    statusCard.className = "status-card";
+
+    // Tolerance range (e.g. S/. 0.01 for rounding issues)
+    const threshold = 0.015;
+
+    if (Math.abs(difference) <= threshold) {
+      statusCard.classList.add("perfect");
+      statusTitle.textContent = "Caja Cuadrada";
+      statusDiff.textContent = "S/. 0.00";
+      statusDesc.textContent =
+        "El conteo físico de dinero coincide plenamente con las ventas del día.";
+    } else if (difference > 0) {
+      statusCard.classList.add("sobra");
+      statusTitle.textContent = "Sobrante de Caja";
+      statusDiff.textContent = `S/. +${difference.toFixed(2)}`;
+      statusDesc.textContent =
+        "Se ha recaudado más dinero en caja que el registrado por las ventas teóricas.";
+    } else {
+      statusCard.classList.add("falta");
+      statusTitle.textContent = "Faltante de Caja";
+      statusDiff.textContent = `S/. ${difference.toFixed(2)}`;
+      statusDesc.textContent =
+        "Existe un déficit de dinero recaudado frente a las ventas teóricas del reporte.";
+    }
+  }
+
+  // --- EXPORT TO EXCEL ---
+  exportExcelBtn.addEventListener("click", () => {
+    // Get totals
+    const sumNvs = state.documents
+      .filter((d) => d.type === "NV")
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+    const sumBoletas = state.documents
+      .filter(
+        (d) =>
+          d.type === "BOLETA" ||
+          (d.type === "NC" && d.serie.toUpperCase().startsWith("B")),
+      )
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+    const sumFacturas = state.documents
+      .filter(
+        (d) =>
+          d.type === "FACTURA" ||
+          (d.type === "NC" && d.serie.toUpperCase().startsWith("F")),
+      )
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+
+    const salesTotal = sumNvs + sumBoletas + sumFacturas;
+
+    // Bank BCP is the sum of transfers table!
+    const bankTotal = state.bankTransfers.reduce(
+      (acc, t) => (t.type === "NC" ? acc - t.importe : acc + t.importe),
+      0,
+    );
+
+    const creditTotal = state.documents
+      .filter((d) => d.metodoPago === "credito")
+      .reduce(
+        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        0,
+      );
+    const adjTotal = state.cashAdjustments.reduce(
+      (acc, adj) => acc + adj.amount,
+      0,
+    );
+    const expectedCash = salesTotal - bankTotal - creditTotal + adjTotal;
+    const actualCash = state.cashCount.reduce((acc, c) => acc + c.total, 0);
+    const difference = actualCash - expectedCash;
+
+    exportToExcel({
+      date: state.date,
+      documents: state.documents,
+      bankTransfers: state.bankTransfers,
+      cashCount: state.cashCount,
+      cashAdjustments: state.cashAdjustments,
+      totals: {
+        salesTotal,
+        bankTotal,
+        cashTotal: actualCash,
+        difference,
+      },
+    });
+  });
+</script>

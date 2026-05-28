@@ -1,0 +1,127 @@
+---
+---
+<div id="confirm-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-icon">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="12" y1="9" x2="12" y2="13" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="12" y1="17" x2="12.01" y2="17" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="modal-content">
+      <h3 id="confirm-title">¿Estás seguro?</h3>
+      <p id="confirm-message">Esta acción modificará los datos de la caja diaria y requiere confirmación.</p>
+    </div>
+    <div class="modal-actions">
+      <button id="confirm-cancel-btn" class="btn btn-secondary">Cancelar</button>
+      <button id="confirm-ok-btn" class="btn btn-primary">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(43, 37, 33, 0.4);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .modal-overlay:not(.hidden) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal-card {
+    background-color: var(--color-white);
+    border-radius: 20px;
+    padding: 2rem;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 20px 40px rgba(43, 37, 33, 0.15);
+    border: 1px solid var(--color-border);
+    text-align: center;
+    transform: scale(0.9);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .modal-overlay:not(.hidden) .modal-card {
+    transform: scale(1);
+  }
+
+  .modal-icon {
+    width: 60px;
+    height: 60px;
+    background-color: var(--color-error-bg);
+    color: var(--color-error);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.25rem;
+  }
+
+  .modal-content h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .modal-content p {
+    font-size: 0.9rem;
+    color: var(--color-dark-muted);
+    margin-bottom: 1.5rem;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: var(--transition-smooth);
+  }
+
+  .btn-secondary {
+    background-color: var(--color-cream-dark);
+    color: var(--color-dark-muted);
+    border-color: var(--color-border);
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--color-border);
+    color: var(--color-dark);
+  }
+
+  .btn-primary {
+    background-color: var(--color-orange);
+    color: var(--color-white);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-orange-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(230, 126, 34, 0.2);
+  }
+
+  .hidden {
+    display: none !important;
+  }
+</style>

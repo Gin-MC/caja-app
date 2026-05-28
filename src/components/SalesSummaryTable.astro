@@ -1,0 +1,407 @@
+---
+
+---
+
+<div class="sales-summary-container">
+  <div class="table-header-row">
+    <div class="header-titles">
+      <h2>Resumen de Ventas Diarias</h2>
+      <p class="subtitle">
+        Clasificación, importes y métodos de pago de comprobantes
+      </p>
+    </div>
+    <button id="add-doc-btn" class="btn-add-doc">
+      <svg
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      Agregar Comprobante
+    </button>
+  </div>
+
+  <div class="tables-grid">
+    <!-- Ventas S/Doc Table -->
+    <div class="table-card">
+      <div class="card-header border-nv">
+        <h3>Notas de Venta (S/Doc)</h3>
+        <span id="count-nv" class="badge">0 items</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th class="text-center">Nro. Doc</th>
+              <th class="text-right">Monto</th>
+              <th class="text-center">Método Pago</th>
+              <th class="text-center" style="width: 40px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-nv">
+            <tr>
+              <td colspan="4" class="empty-state"
+                >No hay comprobantes cargados</td
+              >
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <span>Total Notas Venta:</span>
+        <strong id="total-nv">S/. 0.00</strong>
+      </div>
+    </div>
+
+    <!-- Boletas Table -->
+    <div class="table-card">
+      <div class="card-header border-boleta">
+        <h3>Boletas (03) y NC</h3>
+        <span id="count-boleta" class="badge">0 items</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th class="text-center">Nro. Doc</th>
+              <th class="text-right">Monto</th>
+              <th class="text-center">Método Pago</th>
+              <th class="text-center" style="width: 40px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-boleta">
+            <tr>
+              <td colspan="4" class="empty-state"
+                >No hay comprobantes cargados</td
+              >
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <span>Total Boletas:</span>
+        <strong id="total-boleta">S/. 0.00</strong>
+      </div>
+    </div>
+
+    <!-- Facturas Table -->
+    <div class="table-card">
+      <div class="card-header border-factura">
+        <h3>Facturas (01) y NC</h3>
+        <span id="count-factura" class="badge">0 items</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th class="text-center">Nro. Doc</th>
+              <th class="text-right">Monto</th>
+              <th class="text-center">Método Pago</th>
+              <th class="text-center" style="width: 40px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-factura">
+            <tr>
+              <td colspan="4" class="empty-state"
+                >No hay comprobantes cargados</td
+              >
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer">
+        <span>Total Facturas:</span>
+        <strong id="total-factura">S/. 0.00</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  /* Alignment utilities */
+  .text-left {
+    text-align: left !important;
+  }
+  .text-center {
+    text-align: center !important;
+  }
+  .text-right {
+    text-align: right !important;
+  }
+
+  /* Distinct backgrounds based on payment methods for maximum visibility */
+  tr.payment-banco td {
+    background-color: #ebf5fb !important; /* Soft premium blue */
+    color: #1a5276 !important;
+  }
+
+  tr.payment-credito td {
+    background-color: #fef9e7 !important; /* Soft premium yellow */
+    color: #7d6608 !important;
+  }
+
+  tr.payment-nc td {
+    background-color: #fdedec !important; /* Soft red for NC */
+    color: #78281f !important;
+  }
+
+  tr.payment-nc td.doc-num {
+    color: #c0392b !important;
+    font-weight: 700;
+  }
+</style>
+
+<style is:global>
+  .sales-summary-container {
+    width: 100%;
+    margin-bottom: 2.5rem;
+  }
+
+  .sales-summary-container .table-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .sales-summary-container .header-titles h2 {
+    font-size: 1.5rem;
+    color: var(--color-dark);
+  }
+
+  .sales-summary-container .subtitle {
+    font-size: 0.85rem;
+    color: var(--color-dark-muted);
+  }
+
+  .sales-summary-container .btn-add-doc {
+    background-color: var(--color-orange);
+    color: var(--color-white);
+    border: none;
+    border-radius: 12px;
+    padding: 0.65rem 1.25rem;
+    font-family: var(--font-primary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: var(--transition-smooth);
+    box-shadow: 0 4px 12px rgba(230, 126, 34, 0.15);
+  }
+
+  .sales-summary-container .btn-add-doc:hover {
+    background-color: var(--color-orange-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(230, 126, 34, 0.25);
+  }
+
+  .sales-summary-container .tables-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 1024px) {
+    .sales-summary-container .tables-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .sales-summary-container .table-card {
+    background-color: var(--color-white);
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 4px 15px var(--color-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: auto; /* Grows dynamically based on content */
+    transition: var(--transition-smooth);
+  }
+
+  .sales-summary-container .card-header {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .sales-summary-container .card-header h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .sales-summary-container .border-nv {
+    border-top: 5px solid #2980b9;
+  }
+  .sales-summary-container .border-boleta {
+    border-top: 5px solid #8e44ad;
+  }
+  .sales-summary-container .border-factura {
+    border-top: 5px solid var(--color-orange);
+  }
+
+  .sales-summary-container .badge {
+    background-color: var(--color-cream);
+    color: var(--color-dark-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+  }
+
+  .sales-summary-container .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .sales-summary-container table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  .sales-summary-container th {
+    background-color: var(--color-cream);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 0.75rem 1rem;
+    color: var(--color-dark-muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .sales-summary-container td {
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--color-cream-dark);
+    vertical-align: middle;
+    text-align: center;
+  }
+
+  .sales-summary-container .doc-num {
+    font-weight: 600;
+    color: var(--color-dark);
+    text-align: center;
+  }
+
+  .sales-summary-container .doc-amount-input {
+    width: 90px;
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    font-family: var(--font-primary);
+    font-size: 0.88rem;
+    font-weight: 700;
+    outline: none;
+    transition: var(--transition-smooth);
+    background-color: var(--color-cream);
+    text-align: right;
+  }
+
+  .sales-summary-container .doc-amount-input:focus {
+    border-color: var(--color-orange);
+    background-color: var(--color-white);
+    box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.05);
+  }
+
+  /* Make NC negative input colored */
+  .sales-summary-container tr.payment-nc .doc-amount-input {
+    color: #c0392b;
+    background-color: #fdedec;
+    border-color: #fadbd8;
+  }
+
+  .sales-summary-container .payment-select {
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    font-family: var(--font-primary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    outline: none;
+    background-color: var(--color-cream);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    width: 100%;
+    text-align: center;
+  }
+
+  .sales-summary-container .payment-select:focus {
+    border-color: var(--color-orange);
+  }
+
+  .sales-summary-container .payment-select.banco {
+    background-color: #ebf5fb;
+    color: #1f618d;
+    border-color: #aed6f1;
+  }
+
+  .sales-summary-container .payment-select.credito {
+    background-color: #fef9e7;
+    color: #7d6608;
+    border-color: #f9e79f;
+  }
+
+  .sales-summary-container .action-buttons {
+    display: flex;
+    gap: 0.25rem;
+    justify-content: center;
+  }
+
+  .sales-summary-container .btn-icon {
+    background: none;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--color-dark-muted);
+    transition: var(--transition-smooth);
+  }
+
+  .sales-summary-container .btn-icon:hover {
+    background-color: var(--color-cream-dark);
+    color: var(--color-dark);
+  }
+
+  .sales-summary-container .btn-icon.delete:hover {
+    background-color: var(--color-error-bg);
+    color: var(--color-error);
+  }
+
+  .sales-summary-container .card-footer {
+    padding: 1.25rem 1.5rem;
+    background-color: var(--color-cream);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+  }
+
+  .sales-summary-container .card-footer strong {
+    font-size: 1.1rem;
+    color: var(--color-dark);
+  }
+
+  .sales-summary-container .empty-state {
+    text-align: center;
+    color: var(--color-dark-muted);
+    font-style: italic;
+    padding: 3rem 1rem;
+  }
+</style>

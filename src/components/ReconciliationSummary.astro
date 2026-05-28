@@ -1,0 +1,440 @@
+---
+---
+<div class="recon-container">
+  <div class="table-header-row">
+    <div class="header-titles">
+      <h2>Resumen de Cierre de Caja</h2>
+      <p class="subtitle">Resultado final de la conciliación entre ventas teóricas y dinero real</p>
+    </div>
+  </div>
+
+  <div class="recon-grid">
+    <!-- Calculations Card -->
+    <div class="summary-card">
+      <div class="summary-item">
+        <span class="item-label">TOTAL VENTAS REGISTRADAS (A)</span>
+        <span id="recon-sales-total" class="item-value font-large">S/. 0.00</span>
+      </div>
+      <div class="divider"></div>
+      <div class="summary-item">
+        <span class="item-label">Total Banco BCP (Yape / Transf.) (B)</span>
+        <span id="recon-bank-total" class="item-value">S/. 0.00</span>
+      </div>
+      <div class="summary-item">
+        <span class="item-label">Total Ventas a Crédito (C)</span>
+        <span id="recon-credit-total" class="item-value">S/. 0.00</span>
+      </div>
+
+      <!-- Dynamic Cash Adjustments Section -->
+      <div class="adjustments-section">
+        <div class="adjustments-header">
+          <span class="adjustments-title">Otros Conceptos (Ingresos / Gastos de Caja)</span>
+          <button id="add-adjustment-btn" class="btn-adjust-add" type="button">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:2px;">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Agregar Concepto
+          </button>
+        </div>
+        <div id="adjustments-list" class="adjustments-list">
+          <!-- Injected by JavaScript -->
+        </div>
+      </div>
+
+      <div class="summary-item highlight-cream">
+        <span class="item-label">Efectivo Teórico Esperado (A - B - C + Ajustes)</span>
+        <span id="recon-expected-cash" class="item-value font-bold">S/. 0.00</span>
+      </div>
+      <div class="summary-item">
+        <span class="item-label">Efectivo Físico Real Recaudado (D)</span>
+        <span id="recon-physical-cash" class="item-value">S/. 0.00</span>
+      </div>
+      <div class="divider"></div>
+      <div class="summary-item highlight-dark">
+        <span class="item-label text-light">TOTAL RECONCILIADO REAL (B + D)</span>
+        <span id="recon-actual-total" class="item-value font-large font-bold text-light">S/. 0.00</span>
+      </div>
+    </div>
+
+    <!-- Alert / Action Box -->
+    <div class="status-action-box">
+      <!-- Unloaded State -->
+      <div id="recon-unloaded-state" class="state-container">
+        <div class="info-icon">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+        </div>
+        <p>Carga el reporte de ventas diario para ver los cálculos e iniciar la conciliación.</p>
+      </div>
+
+      <!-- Loaded Active State -->
+      <div id="recon-loaded-state" class="state-container hidden">
+        <div id="recon-status-card" class="status-card">
+          <div class="status-header">
+            <span class="status-title" id="recon-status-title">Reconciliando...</span>
+          </div>
+          <div class="status-body">
+            <span class="status-diff" id="recon-status-diff">S/. 0.00</span>
+            <p class="status-desc" id="recon-status-desc">Cargando reconciliación...</p>
+          </div>
+        </div>
+
+        <div class="action-buttons-row">
+          <button id="export-excel-btn" class="btn-export">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Exportar Excel y Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .recon-container {
+    width: 100%;
+    margin-bottom: 3rem;
+  }
+
+  .table-header-row {
+    margin-bottom: 1.25rem;
+  }
+
+  .header-titles h2 {
+    font-size: 1.35rem;
+    color: var(--color-dark);
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    color: var(--color-dark-muted);
+  }
+
+  .recon-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .recon-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .summary-card {
+    background-color: var(--color-white);
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 4px 15px var(--color-shadow);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0;
+  }
+
+  .item-label {
+    font-size: 0.88rem;
+    color: var(--color-dark-muted);
+    font-weight: 500;
+  }
+
+  .item-value {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-dark);
+  }
+
+  .font-large {
+    font-size: 1.2rem;
+  }
+
+  .font-bold {
+    font-weight: 800;
+  }
+
+  .highlight-cream {
+    background-color: var(--color-cream);
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    margin: 0.25rem 0;
+    border: 1px dashed var(--color-border);
+  }
+
+  .highlight-dark {
+    background-color: var(--color-dark);
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    margin-top: 0.5rem;
+  }
+
+  .text-light {
+    color: var(--color-cream) !important;
+  }
+
+  .divider {
+    height: 1px;
+    background-color: var(--color-border);
+    margin: 0.5rem 0;
+  }
+
+  .status-action-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background-color: var(--color-white);
+    border-radius: 20px;
+    border: 1px dashed var(--color-border);
+    padding: 2rem;
+    min-height: 280px;
+    box-shadow: 0 4px 15px var(--color-shadow);
+  }
+
+  .state-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 1rem;
+    height: 100%;
+    width: 100%;
+  }
+
+  .info-icon {
+    color: var(--color-dark-muted);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+
+  /* Status Card */
+  .status-card {
+    width: 100%;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    transition: var(--transition-smooth);
+  }
+
+  .status-card.perfect {
+    background-color: var(--color-success-bg);
+    border: 1px solid #A9DFBF;
+    color: var(--color-success);
+  }
+
+  .status-card.sobra {
+    background-color: #EBF5FB;
+    border: 1px solid #AED6F1;
+    color: #2980B9;
+  }
+
+  .status-card.falta {
+    background-color: var(--color-error-bg);
+    border: 1px solid #F5B7B1;
+    color: var(--color-error);
+  }
+
+  .status-header {
+    margin-bottom: 0.5rem;
+  }
+
+  .status-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .status-diff {
+    font-size: 2.2rem;
+    font-weight: 800;
+    font-family: var(--font-heading);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-desc {
+    font-size: 0.88rem;
+    color: var(--color-dark-muted);
+    font-weight: 500;
+  }
+
+  .status-card.perfect .status-desc { color: #196F3D; }
+  .status-card.sobra .status-desc { color: #1B4F72; }
+  .status-card.falta .status-desc { color: #7B241C; }
+
+  /* Action Buttons Row */
+  .action-buttons-row {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .btn-export {
+    background-color: var(--color-dark);
+    color: var(--color-cream);
+    border: none;
+    border-radius: 14px;
+    padding: 1rem 2rem;
+    font-family: var(--font-primary);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: var(--transition-smooth);
+    width: 100%;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(43, 37, 33, 0.15);
+  }
+
+  .btn-export:hover {
+    background-color: var(--color-orange);
+    color: var(--color-white);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(230, 126, 34, 0.25);
+  }
+
+  .hidden {
+    display: none !important;
+  }
+
+  /* Cash Adjustments CSS */
+  .adjustments-section {
+    background-color: #FDFEFE;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+    margin: 0.25rem 0;
+  }
+
+  .adjustments-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.65rem;
+  }
+
+  .adjustments-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--color-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-adjust-add {
+    background-color: var(--color-cream-dark);
+    color: var(--color-dark);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: var(--transition-smooth);
+  }
+
+  .btn-adjust-add:hover {
+    background-color: var(--color-orange);
+    color: var(--color-white);
+    border-color: var(--color-orange);
+  }
+
+  .adjustments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .adjustment-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .adj-desc-input {
+    flex: 1;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    font-family: var(--font-primary);
+    font-size: 0.82rem;
+    outline: none;
+    background-color: var(--color-cream);
+    transition: var(--transition-smooth);
+    font-weight: 500;
+  }
+
+  .adj-desc-input:focus {
+    border-color: var(--color-orange);
+    background-color: var(--color-white);
+  }
+
+  .adj-amount-input {
+    width: 95px;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    font-family: var(--font-primary);
+    font-size: 0.82rem;
+    outline: none;
+    background-color: var(--color-cream);
+    transition: var(--transition-smooth);
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .adj-amount-input:focus {
+    border-color: var(--color-orange);
+    background-color: var(--color-white);
+  }
+
+  .btn-adj-delete {
+    background: none;
+    border: none;
+    color: var(--color-dark-muted);
+    font-size: 1.25rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.25rem;
+    transition: var(--transition-smooth);
+  }
+
+  .btn-adj-delete:hover {
+    color: var(--color-error);
+    transform: scale(1.1);
+  }
+</style>

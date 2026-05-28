@@ -1,0 +1,242 @@
+---
+---
+<div class="bank-transfers-container">
+  <div class="table-header-row flex-row">
+    <div class="header-titles">
+      <h2>Transferencias Bancarias (Yape / BCP)</h2>
+      <p class="subtitle">Ingreso de número de operación, hora y verificación de abonos</p>
+    </div>
+    <button id="add-bank-row-btn" class="btn-add-bank">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <line x1="5" y1="12" x2="19" y2="12" />
+      </svg>
+      Agregar Transferencia
+    </button>
+  </div>
+
+  <div class="table-card full-width-card">
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th class="text-center" style="width: 160px;">Fecha</th>
+            <th class="text-center" style="width: 100px;">Tipo</th>
+            <th class="text-center" style="width: 150px;">Nro. Doc</th>
+            <th class="text-right" style="width: 140px;">Monto Transf.</th>
+            <th class="text-center" style="width: 160px;"># Operación</th>
+            <th class="text-center" style="width: 120px;">Hora</th>
+            <th class="text-center" style="width: 110px;">Verificado</th>
+            <th class="text-center" style="width: 50px;">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-bank">
+          <tr>
+            <td colspan="8" class="empty-state">No hay transferencias registradas. Marca algún comprobante en el Resumen de Ventas como 'Banco BCP'.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="card-footer">
+      <span>Total Reconciliado Banco BCP:</span>
+      <strong id="total-bank-transfers">S/. 0.00</strong>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  .bank-transfers-container {
+    width: 100%;
+    margin-bottom: 2.5rem;
+  }
+
+  .bank-transfers-container .table-header-row {
+    margin-bottom: 1.25rem;
+  }
+
+  .bank-transfers-container .header-titles h2 {
+    font-size: 1.35rem;
+    color: var(--color-dark);
+  }
+
+  .bank-transfers-container .subtitle {
+    font-size: 0.85rem;
+    color: var(--color-dark-muted);
+  }
+
+  .bank-transfers-container .full-width-card {
+    background-color: var(--color-white);
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 4px 15px var(--color-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .bank-transfers-container .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .bank-transfers-container table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  .bank-transfers-container th {
+    background-color: var(--color-cream);
+    padding: 0.85rem 1.25rem;
+    color: var(--color-dark-muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .bank-transfers-container td {
+    padding: 0.8rem 1.25rem;
+    border-bottom: 1px solid var(--color-cream-dark);
+    vertical-align: middle;
+    text-align: center;
+  }
+
+  .bank-transfers-container tr:hover td {
+    background-color: rgba(249, 247, 243, 0.5);
+  }
+
+  .bank-transfers-container .doc-num {
+    font-weight: 600;
+    color: var(--color-dark);
+    text-align: center;
+  }
+
+  .bank-transfers-container .bank-input, 
+  .bank-transfers-container .bank-type-select {
+    width: 100%;
+    padding: 0.45rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    font-family: var(--font-primary);
+    font-size: 0.88rem;
+    outline: none;
+    background-color: var(--color-cream);
+    transition: var(--transition-smooth);
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .bank-transfers-container .bank-input:focus, 
+  .bank-transfers-container .bank-type-select:focus {
+    border-color: var(--color-orange);
+    background-color: var(--color-white);
+    box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.05);
+  }
+
+  /* Make date-input look great */
+  .bank-transfers-container .bank-input.date-input {
+    font-weight: 600;
+    color: var(--color-dark);
+    background-color: var(--color-cream);
+    text-align: center;
+  }
+
+  /* Verified toggle button */
+  .bank-transfers-container .verify-btn {
+    background-color: var(--color-cream-dark);
+    color: var(--color-dark-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    text-transform: uppercase;
+    display: block;
+    margin: 0 auto;
+  }
+
+  .bank-transfers-container .verify-btn.verified {
+    background-color: var(--color-success-bg);
+    color: var(--color-success);
+    border-color: #A9DFBF;
+  }
+
+  .bank-transfers-container .flex-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .bank-transfers-container .btn-add-bank {
+    background-color: #2980B9;
+    color: var(--color-white);
+    border: none;
+    border-radius: 12px;
+    padding: 0.65rem 1.25rem;
+    font-family: var(--font-primary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: var(--transition-smooth);
+    box-shadow: 0 4px 12px rgba(41, 128, 185, 0.15);
+  }
+
+  .bank-transfers-container .btn-add-bank:hover {
+    background-color: #1F618D;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(41, 128, 185, 0.25);
+  }
+
+  .bank-transfers-container .card-footer {
+    padding: 1.25rem 1.5rem;
+    background-color: var(--color-cream);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.98rem;
+  }
+
+  .bank-transfers-container .card-footer strong {
+    font-size: 1.15rem;
+    color: var(--color-dark);
+  }
+
+  .bank-transfers-container .empty-state {
+    text-align: center;
+    color: var(--color-dark-muted);
+    font-style: italic;
+    padding: 3.5rem 1rem;
+  }
+
+  .bank-transfers-container .bank-amount-input {
+    width: 90px;
+    padding: 0.4rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    font-family: var(--font-primary);
+    font-size: 0.88rem;
+    font-weight: 700;
+    outline: none;
+    transition: var(--transition-smooth);
+    background-color: var(--color-cream);
+    text-align: right;
+  }
+
+  .bank-transfers-container .bank-amount-input:focus {
+    border-color: #2980B9;
+    background-color: var(--color-white);
+    box-shadow: 0 0 0 3px rgba(41, 128, 185, 0.05);
+  }
+
+  .bank-transfers-container .action-buttons {
+    display: flex;
+    justify-content: center;
+  }
+</style>

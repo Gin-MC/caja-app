@@ -1,0 +1,94 @@
+---
+import Logo from './Logo.astro';
+---
+
+<header class="main-header">
+  <div class="header-inner">
+    <a href="/" class="header-logo-link">
+      <Logo />
+    </a>
+    <div class="header-meta">
+      <span class="meta-badge">Conciliación de Caja</span>
+      <span id="current-date" class="meta-date">Cargando fecha...</span>
+    </div>
+  </div>
+</header>
+
+<style>
+  .main-header {
+    background-color: var(--color-white);
+    border-bottom: 1px solid var(--color-border);
+    padding: 1.25rem 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(43, 37, 33, 0.02);
+  }
+
+  .header-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header-logo-link {
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .meta-badge {
+    background-color: var(--color-cream);
+    color: var(--color-orange);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+  }
+
+  .meta-date {
+    font-size: 0.85rem;
+    color: var(--color-dark-muted);
+    font-weight: 500;
+  }
+
+  @media (max-width: 640px) {
+    .main-header {
+      padding: 1rem;
+    }
+    .header-inner {
+      flex-direction: column;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+    .header-meta {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+</style>
+
+<script>
+  // Display current date in a friendly format
+  const dateElement = document.getElementById('current-date');
+  if (dateElement) {
+    const today = new Date();
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    };
+    dateElement.textContent = today.toLocaleDateString('es-PE', options);
+  }
+</script>
