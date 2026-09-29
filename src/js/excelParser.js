@@ -64,6 +64,7 @@ export function parseDailyReport(arrayBuffer) {
       nombre: row['Nombre'] ? String(row['Nombre']).trim() : 'CLIENTES VARIOS',
       importe: importe,
       metodoPago: 'efectivo', // default
+      condicion: 'normal', // default condition
       verificado: 'NO', // for bank transfers
       nroOperacion: '',
       hora: ''

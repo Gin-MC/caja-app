@@ -166,6 +166,8 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
 <script>
   import { parseDailyReport } from "../js/excelParser.js";
   import { exportToExcel } from "../js/excelExporter.js";
+  import { exportToPdf } from "../js/pdfExporter.js";
+  import { sortBankTransfers } from "../js/bankSorter.js";
 
   // --- STATE SYSTEM ---
   interface DocumentItem {
@@ -178,7 +180,8 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     codigo: string;
     nombre: string;
     importe: number;
-    metodoPago: "efectivo" | "banco" | "credito";
+    metodoPago: "efectivo" | "banco";
+    condicion: "normal" | "credito" | "anulado" | "otra_fecha";
     verificado?: string;
     nroOperacion?: string;
     hora?: string;
@@ -233,6 +236,75 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     cashAdjustments: [],
   };
 
+  // --- LOCAL PERSISTENCE SYSTEM ---
+  const STORAGE_KEY = "plastiluz_caja_state";
+
+  function saveStateToStorage() {
+    try {
+      if (!state.documents || state.documents.length === 0) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      const dataToSave = {
+        date: state.date instanceof Date ? state.date.toISOString() : new Date(state.date).toISOString(),
+        fileName: state.fileName,
+        documents: state.documents,
+        bankTransfers: state.bankTransfers,
+        cashCount: state.cashCount,
+        cashAdjustments: state.cashAdjustments,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+    } catch (err) {
+      console.warn("Error guardando en localStorage:", err);
+    }
+  }
+
+  function loadStateFromStorage(): boolean {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return false;
+      const data = JSON.parse(saved);
+      if (!data || !Array.isArray(data.documents) || data.documents.length === 0) return false;
+
+      state.date = data.date ? new Date(data.date) : new Date();
+      state.fileName = data.fileName || "Reporte Restaurado";
+      state.documents = (data.documents || []).map((d: any) => {
+        let cond = d.condicion;
+        let pago = d.metodoPago;
+        if (!cond) {
+          if (pago === "credito") {
+            cond = "credito";
+            pago = "efectivo";
+          } else if (pago === "anulado") {
+            cond = "anulado";
+            pago = "efectivo";
+          } else if (pago === "banco") {
+            cond = "normal";
+            pago = "banco";
+          } else {
+            cond = "normal";
+            pago = "efectivo";
+          }
+        }
+        return {
+          ...d,
+          metodoPago: pago === "banco" ? "banco" : "efectivo",
+          condicion: cond || "normal",
+        };
+      });
+      state.bankTransfers = data.bankTransfers || [];
+      state.cashCount = data.cashCount || [
+        ...initialCoins.map((v) => ({ value: v, quantity: null, total: 0 })),
+        ...initialBills.map((v) => ({ value: v, quantity: null, total: 0 })),
+      ];
+      state.cashAdjustments = data.cashAdjustments || [];
+      return true;
+    } catch (err) {
+      console.warn("Error cargando de localStorage:", err);
+      return false;
+    }
+  }
+
   // --- DOM REFERENCES ---
   const dropzone = document.getElementById("dropzone") as HTMLDivElement;
   const fileInput = document.getElementById("file-input") as HTMLInputElement;
@@ -251,6 +323,9 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
   const clearFileBtn = document.getElementById(
     "clear-file-btn",
   ) as HTMLButtonElement;
+  const clearAllDataBtn = document.getElementById(
+    "clear-all-data-btn",
+  ) as HTMLButtonElement | null;
   const workspaceArea = document.getElementById(
     "workspace-area",
   ) as HTMLDivElement;
@@ -295,24 +370,63 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     "add-bank-row-btn",
   ) as HTMLButtonElement;
 
-  // Export Bton
+  // Export Buttons
   const exportExcelBtn = document.getElementById(
     "export-excel-btn",
   ) as HTMLButtonElement;
+  const exportPdfBtn = document.getElementById(
+    "export-pdf-btn",
+  ) as HTMLButtonElement | null;
 
   // --- UNIVERSAL CONFIRMATION DIALOG ---
   let onConfirmOkCallback: (() => void) | null = null;
+  let onConfirmCancelCallback: (() => void) | null = null;
 
-  function askConfirmation(title: string, message: string, onOk: () => void) {
+  function askConfirmation(
+    title: string,
+    message: string,
+    onOk: () => void,
+    onCancel?: () => void,
+  ) {
     confirmTitle.textContent = title;
     confirmMsg.textContent = message;
     onConfirmOkCallback = onOk;
+    onConfirmCancelCallback = onCancel || null;
     confirmModal.classList.remove("hidden");
+    setTimeout(() => {
+      confirmOkBtn.focus();
+    }, 50);
   }
 
-  confirmCancelBtn.addEventListener("click", () => {
+  const handleConfirmCancel = () => {
     confirmModal.classList.add("hidden");
+    if (onConfirmCancelCallback) {
+      onConfirmCancelCallback();
+    }
     onConfirmOkCallback = null;
+    onConfirmCancelCallback = null;
+  };
+
+  // Keyboard navigation for confirmation dialog (Enter to accept, Escape to cancel)
+  window.addEventListener("keydown", (e) => {
+    if (!confirmModal.classList.contains("hidden")) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        confirmOkBtn.click();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handleConfirmCancel();
+      }
+    }
+  });
+
+  confirmCancelBtn.addEventListener("click", handleConfirmCancel);
+
+  // Close when clicking modal backdrop
+  confirmModal.addEventListener("click", (e) => {
+    if (e.target === confirmModal) {
+      handleConfirmCancel();
+    }
   });
 
   confirmOkBtn.addEventListener("click", () => {
@@ -321,11 +435,57 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     }
     confirmModal.classList.add("hidden");
     onConfirmOkCallback = null;
+    onConfirmCancelCallback = null;
   });
 
+  // Helper to sync Bank Transfers for a document
+  function syncBankTransferForDoc(doc: DocumentItem) {
+    if (doc.metodoPago === "banco" && doc.condicion === "normal") {
+      const exists = state.bankTransfers.some((t) => t.docId === doc.id);
+      if (!exists) {
+        state.bankTransfers.push({
+          id: `bcp-${doc.id}-${Date.now()}`,
+          docId: doc.id,
+          fecha: doc.fecha || new Date(state.date).toISOString().split("T")[0],
+          type: doc.type,
+          serie: doc.serie,
+          numero: doc.numero,
+          importe: doc.importe,
+          nroOperacion: doc.nroOperacion || "",
+          hora: doc.hora || "",
+          verificado: "SI",
+        });
+      }
+    } else {
+      state.bankTransfers = state.bankTransfers.filter(
+        (t) => t.docId !== doc.id,
+      );
+    }
+  }
+
   // --- NEW DOCUMENT DIALOG HANDLERS ---
+  const docCondicionSelect = document.getElementById("doc-condicion") as HTMLSelectElement;
+  const docOtraFechaGroup = document.getElementById("new-doc-otra-fecha-group") as HTMLDivElement;
+  const docFechaOtraInput = document.getElementById("doc-fecha-otra") as HTMLInputElement;
+
+  if (docCondicionSelect && docOtraFechaGroup) {
+    docCondicionSelect.addEventListener("change", () => {
+      if (docCondicionSelect.value === "otra_fecha") {
+        docOtraFechaGroup.classList.remove("hidden");
+        if (!docFechaOtraInput.value) {
+          const d = new Date(state.date);
+          d.setDate(d.getDate() - 1);
+          docFechaOtraInput.value = d.toISOString().split("T")[0];
+        }
+      } else {
+        docOtraFechaGroup.classList.add("hidden");
+      }
+    });
+  }
+
   openNewDocBtn.addEventListener("click", () => {
     newDocForm.reset();
+    if (docOtraFechaGroup) docOtraFechaGroup.classList.add("hidden");
     newDocModal.classList.remove("hidden");
   });
 
@@ -345,9 +505,13 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     const amount = parseFloat(
       (document.getElementById("doc-amount") as HTMLInputElement).value,
     );
-    const payment = (
+    const payment = ((
       document.getElementById("doc-payment") as HTMLSelectElement
-    ).value as any;
+    )?.value || "efectivo") as "efectivo" | "banco";
+    const condicion = ((
+      document.getElementById("doc-condicion") as HTMLSelectElement
+    )?.value || "normal") as "normal" | "credito" | "anulado" | "otra_fecha";
+    const fechaOtra = docFechaOtraInput?.value || "";
 
     if (!numberInput || isNaN(amount)) return;
 
@@ -387,6 +551,17 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
       numero = parts.slice(1).join("-").trim();
     }
 
+    let resolvedFechaOtra: string | undefined = undefined;
+    if (condicion === "otra_fecha") {
+      if (fechaOtra) {
+        resolvedFechaOtra = fechaOtra;
+      } else {
+        const d = new Date(state.date);
+        d.setDate(d.getDate() - 1);
+        resolvedFechaOtra = d.toISOString().split("T")[0];
+      }
+    }
+
     askConfirmation(
       "Confirmar adición de documento",
       `¿Deseas agregar manualmente el comprobante ${type} Nro. ${serie}-${numero} por un monto de S/. ${amount.toFixed(2)}?`,
@@ -403,12 +578,15 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
           nombre: "INGRESO MANUAL",
           importe: amount,
           metodoPago: payment,
-          verificado: payment === "banco" ? "SI" : "NO",
+          condicion: condicion,
+          fechaOtra: resolvedFechaOtra,
+          verificado: payment === "banco" && condicion === "normal" ? "SI" : "NO",
           nroOperacion: "",
           hora: "",
         };
 
         state.documents.push(newDoc);
+        syncBankTransferForDoc(newDoc);
 
         // Resort documents by number
         state.documents.sort((a, b) => {
@@ -516,6 +694,7 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
 
   // --- RESET STATE ---
   function clearFile() {
+    localStorage.removeItem(STORAGE_KEY);
     state.documents = [];
     state.bankTransfers = [];
     state.cashAdjustments = [];
@@ -529,13 +708,16 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     welcomePanel.classList.remove("hidden");
   }
 
-  clearFileBtn.addEventListener("click", () => {
+  const handleClearRequest = () => {
     askConfirmation(
-      "Confirmar reinicio",
-      "¿Estás seguro de que quieres limpiar la sesión actual? Se perderán todas las modificaciones y el conteo de efectivo actual.",
+      "Confirmar reinicio de caja",
+      "¿Estás seguro de que quieres limpiar toda la información de la caja actual? Se borrarán los comprobantes, transferencias y el conteo de efectivo guardado.",
       clearFile,
     );
-  });
+  };
+
+  clearFileBtn.addEventListener("click", handleClearRequest);
+  clearAllDataBtn?.addEventListener("click", handleClearRequest);
 
   // --- ADD MANUAL BANK ROW ---
   addBankRowBtn.addEventListener("click", () => {
@@ -575,6 +757,7 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     renderCashCount();
     renderCashAdjustments();
     renderCalculations();
+    saveStateToStorage();
   }
 
   // Render main tables
@@ -629,20 +812,24 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     ) => {
       tbody.innerHTML = "";
       if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No hay comprobantes cargados</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No hay comprobantes cargados</td></tr>`;
         return;
       }
 
       list.forEach((doc) => {
         const tr = document.createElement("tr");
 
-        // Color row based on payment method or document type (NC)
-        if (doc.type === "NC") {
+        // Color row based on condition, document type (NC) or payment method
+        if (doc.condicion === "anulado") {
+          tr.className = "payment-anulado";
+        } else if (doc.condicion === "otra_fecha") {
+          tr.className = "payment-otra-fecha";
+        } else if (doc.condicion === "credito") {
+          tr.className = "payment-credito";
+        } else if (doc.type === "NC") {
           tr.className = "payment-nc";
         } else if (doc.metodoPago === "banco") {
           tr.className = "payment-banco";
-        } else if (doc.metodoPago === "credito") {
-          tr.className = "payment-credito";
         }
 
         // Document identifier (Show full series-number if NC, else just number)
@@ -659,14 +846,18 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
         inputAmount.type = "number";
         inputAmount.step = "0.01";
         inputAmount.className = "doc-amount-input";
-
-        // Display NC as negative or positive? In UI let's show positive value with minus or actual positive but red colored. Let's make it display normal positive but formatted nicely
         inputAmount.value = doc.importe.toFixed(2);
 
         // Modify amount requires confirmation
         inputAmount.addEventListener("change", () => {
           const newVal = parseFloat(inputAmount.value);
           if (isNaN(newVal) || newVal < 0) {
+            inputAmount.value = doc.importe.toFixed(2);
+            return;
+          }
+
+          // If the value did not actually change, no confirmation needed
+          if (Math.abs(newVal - doc.importe) < 0.0001) {
             inputAmount.value = doc.importe.toFixed(2);
             return;
           }
@@ -689,56 +880,107 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
 
               renderWorkspace();
             },
+            () => {
+              // Revert visual value if user cancelled
+              inputAmount.value = doc.importe.toFixed(2);
+            },
           );
         });
         tdAmount.appendChild(inputAmount);
         tr.appendChild(tdAmount);
 
-        // Payment selector
+        // Payment switch (1-click toggle between Efectivo and Banco)
         const tdPayment = document.createElement("td");
         tdPayment.className = "text-center";
-        const selectPayment = document.createElement("select");
-        selectPayment.className = `payment-select ${doc.metodoPago}`;
-        selectPayment.innerHTML = `
-          <option value="efectivo" ${doc.metodoPago === "efectivo" ? "selected" : ""}>Efectivo</option>
-          <option value="banco" ${doc.metodoPago === "banco" ? "selected" : ""}>Banco</option>
-          <option value="credito" ${doc.metodoPago === "credito" ? "selected" : ""}>Crédito</option>
+        const switchWrapper = document.createElement("div");
+        switchWrapper.className = "pay-switch-wrapper";
+
+        const isSwitchDisabled =
+          doc.condicion === "anulado" ||
+          doc.condicion === "otra_fecha" ||
+          doc.condicion === "credito";
+
+        const switchLabel = document.createElement("label");
+        switchLabel.className = `pay-switch ${isSwitchDisabled ? "disabled" : ""}`;
+        switchLabel.title = isSwitchDisabled
+          ? "No aplica a comprobantes anulados, crédito o de otra fecha"
+          : "Clic para alternar entre Efectivo y Banco BCP";
+
+        const switchInput = document.createElement("input");
+        switchInput.type = "checkbox";
+        switchInput.checked = doc.metodoPago === "banco";
+        if (isSwitchDisabled) switchInput.disabled = true;
+
+        const slider = document.createElement("span");
+        slider.className = "pay-slider";
+        slider.innerHTML = `
+          <span class="pay-label-banco">BANCO</span>
+          <span class="pay-label-efec">EFEC.</span>
         `;
 
-        // NO CONFIRMATION ON PAYMENT METHOD CHANGE AS USER REQUESTED!
-        selectPayment.addEventListener("change", () => {
-          const newMethod = selectPayment.value as any;
-          doc.metodoPago = newMethod;
-
-          // Sync independent BCP transfer row
-          if (newMethod === "banco") {
-            const exists = state.bankTransfers.some((t) => t.docId === doc.id);
-            if (!exists) {
-              state.bankTransfers.push({
-                id: `bcp-${doc.id}-${Date.now()}`,
-                docId: doc.id,
-                fecha:
-                  doc.fecha || new Date(state.date).toISOString().split("T")[0],
-                type: doc.type,
-                serie: doc.serie,
-                numero: doc.numero,
-                importe: doc.importe,
-                nroOperacion: "",
-                hora: "",
-                verificado: "SI",
-              });
-            }
-          } else {
-            // Remove transfer rows associated with this document
-            state.bankTransfers = state.bankTransfers.filter(
-              (t) => t.docId !== doc.id,
-            );
-          }
-
+        switchInput.addEventListener("change", () => {
+          doc.metodoPago = switchInput.checked ? "banco" : "efectivo";
+          syncBankTransferForDoc(doc);
           renderWorkspace();
         });
-        tdPayment.appendChild(selectPayment);
+
+        switchLabel.appendChild(switchInput);
+        switchLabel.appendChild(slider);
+        switchWrapper.appendChild(switchLabel);
+        tdPayment.appendChild(switchWrapper);
         tr.appendChild(tdPayment);
+
+        // Condition selector (Normal, Crédito, Anulado, Otra fecha)
+        const tdCondicion = document.createElement("td");
+        tdCondicion.className = "text-center";
+        const selectCondicion = document.createElement("select");
+        selectCondicion.className = `condicion-select ${doc.condicion}`;
+        selectCondicion.title = "Estado o condición del comprobante";
+        selectCondicion.innerHTML = `
+          <option value="normal" ${doc.condicion === "normal" ? "selected" : ""}>Normal</option>
+          <option value="credito" ${doc.condicion === "credito" ? "selected" : ""}>Crédito</option>
+          <option value="anulado" ${doc.condicion === "anulado" ? "selected" : ""}>Anulado</option>
+          <option value="otra_fecha" ${doc.condicion === "otra_fecha" ? "selected" : ""}>Otra fecha</option>
+        `;
+
+        selectCondicion.addEventListener("change", () => {
+          const newCond = selectCondicion.value as any;
+          doc.condicion = newCond;
+          if (newCond === "otra_fecha" && !doc.fechaOtra) {
+            const d = new Date(state.date);
+            d.setDate(d.getDate() - 1);
+            doc.fechaOtra = d.toISOString().split("T")[0];
+          }
+          syncBankTransferForDoc(doc);
+          renderWorkspace();
+        });
+        tdCondicion.appendChild(selectCondicion);
+
+        if (doc.condicion === "otra_fecha") {
+          const datePickerWrap = document.createElement("div");
+          datePickerWrap.className = "otra-fecha-picker-wrap";
+
+          if (!doc.fechaOtra) {
+            const d = new Date(state.date);
+            d.setDate(d.getDate() - 1);
+            doc.fechaOtra = d.toISOString().split("T")[0];
+          }
+
+          const dateInput = document.createElement("input");
+          dateInput.type = "date";
+          dateInput.className = "otra-fecha-date-input";
+          dateInput.value = doc.fechaOtra;
+          dateInput.title = "Fecha original de la venta";
+          dateInput.addEventListener("change", () => {
+            doc.fechaOtra = dateInput.value;
+            saveStateToStorage();
+          });
+
+          datePickerWrap.appendChild(dateInput);
+          tdCondicion.appendChild(datePickerWrap);
+        }
+
+        tr.appendChild(tdCondicion);
 
         // Action delete button
         const tdActions = document.createElement("td");
@@ -779,17 +1021,35 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     buildRows(boletas, tbodyBoleta);
     buildRows(facturas, tbodyFactura);
 
-    // Sum Footers (Subtract credit notes!)
+    // Sum Footers (Subtract credit notes, exclude anulados and otra_fecha!)
+    const isExcluded = (d: DocumentItem) =>
+      d.condicion === "anulado" || d.condicion === "otra_fecha";
+
     const sumNvsVal = nvs.reduce(
-      (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+      (acc, d) =>
+        isExcluded(d)
+          ? acc
+          : d.type === "NC"
+            ? acc - d.importe
+            : acc + d.importe,
       0,
     );
     const sumBoletasVal = boletas.reduce(
-      (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+      (acc, d) =>
+        isExcluded(d)
+          ? acc
+          : d.type === "NC"
+            ? acc - d.importe
+            : acc + d.importe,
       0,
     );
     const sumFacturasVal = facturas.reduce(
-      (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+      (acc, d) =>
+        isExcluded(d)
+          ? acc
+          : d.type === "NC"
+            ? acc - d.importe
+            : acc + d.importe,
       0,
     );
 
@@ -880,9 +1140,21 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
       inputAmount.step = "0.01";
       inputAmount.className = "bank-amount-input";
       inputAmount.value = transfer.importe.toFixed(2);
+      if (transfer.importe < 0) {
+        inputAmount.style.color = "var(--color-error)";
+        inputAmount.style.fontWeight = "800";
+      }
       inputAmount.addEventListener("input", () => {
         const val = parseFloat(inputAmount.value);
-        transfer.importe = isNaN(val) || val < 0 ? 0 : val;
+        transfer.importe = isNaN(val) ? 0 : val;
+        if (transfer.importe < 0) {
+          inputAmount.style.color = "var(--color-error)";
+          inputAmount.style.fontWeight = "800";
+        } else {
+          inputAmount.style.color = "var(--color-dark)";
+          inputAmount.style.fontWeight = "700";
+        }
+        updateBankTotals();
         renderWorkspaceTotalsOnly(); // recalculate sums in real-time
       });
       tdAmount.appendChild(inputAmount);
@@ -960,13 +1232,16 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
       tbodyBank.appendChild(tr);
     });
 
-    // Subtotal of transfers (subtract NC bank transfers)
-    const totalBankVal = bankTransfs.reduce(
-      (acc, t) => (t.type === "NC" ? acc - t.importe : acc + t.importe),
+    updateBankTotals();
+  }
+
+  function updateBankTotals() {
+    const totalBankVal = state.bankTransfers.reduce(
+      (acc, t) => (t.type === "NC" ? acc - Math.abs(t.importe) : acc + t.importe),
       0,
     );
-    document.getElementById("total-bank-transfers")!.textContent =
-      `S/. ${totalBankVal.toFixed(2)}`;
+    const el = document.getElementById("total-bank-transfers");
+    if (el) el.textContent = `S/. ${totalBankVal.toFixed(2)}`;
   }
 
   // Render Cash Counts
@@ -1049,8 +1324,10 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
       }
     });
 
+    updateBankTotals();
     updateCashTotals();
     renderCalculations();
+    saveStateToStorage();
   }
 
   function updateCashTotals() {
@@ -1091,6 +1368,7 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
       descInput.value = adj.description;
       descInput.addEventListener("input", () => {
         adj.description = descInput.value;
+        saveStateToStorage();
       });
 
       const amtInput = document.createElement("input");
@@ -1103,6 +1381,7 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
         const val = parseFloat(amtInput.value);
         adj.amount = isNaN(val) ? 0 : val;
         renderCalculations(); // recalculate sums in real-time
+        saveStateToStorage();
       });
 
       const delBtn = document.createElement("button");
@@ -1125,11 +1404,20 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
   }
 
   // Render Reconciliation calculations and states
-  function renderCalculations() {
+  // --- RECONCILIATION CALCULATIONS HELPER ---
+  function calculateTotals() {
+    const isExcluded = (d: DocumentItem) =>
+      d.condicion === "anulado" || d.condicion === "otra_fecha";
+
     const sumNvs = state.documents
       .filter((d) => d.type === "NV")
       .reduce(
-        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        (acc, d) =>
+          isExcluded(d)
+            ? acc
+            : d.type === "NC"
+              ? acc - d.importe
+              : acc + d.importe,
         0,
       );
     const sumBoletas = state.documents
@@ -1139,7 +1427,12 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
           (d.type === "NC" && d.serie.toUpperCase().startsWith("B")),
       )
       .reduce(
-        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        (acc, d) =>
+          isExcluded(d)
+            ? acc
+            : d.type === "NC"
+              ? acc - d.importe
+              : acc + d.importe,
         0,
       );
     const sumFacturas = state.documents
@@ -1149,7 +1442,12 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
           (d.type === "NC" && d.serie.toUpperCase().startsWith("F")),
       )
       .reduce(
-        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
+        (acc, d) =>
+          isExcluded(d)
+            ? acc
+            : d.type === "NC"
+              ? acc - d.importe
+              : acc + d.importe,
         0,
       );
 
@@ -1157,13 +1455,13 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
 
     // Bank BCP is the sum of transfers table!
     const bankTotal = state.bankTransfers.reduce(
-      (acc, t) => (t.type === "NC" ? acc - t.importe : acc + t.importe),
+      (acc, t) => (t.type === "NC" ? acc - Math.abs(t.importe) : acc + t.importe),
       0,
     );
 
     // Credit total (subtract NC credit sales)
     const creditTotal = state.documents
-      .filter((d) => d.metodoPago === "credito")
+      .filter((d) => d.condicion === "credito")
       .reduce(
         (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
         0,
@@ -1185,19 +1483,37 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     // Sobra/Falta formula = Money Collected (Bank + Physical Cash) - Expected sales (Total Sales - Credit Sales) + Adjustments
     const difference = actualCash - expectedCash;
 
+    return {
+      sumNvs,
+      sumBoletas,
+      sumFacturas,
+      salesTotal,
+      bankTotal,
+      creditTotal,
+      adjTotal,
+      expectedCash,
+      actualCash,
+      actualTotal,
+      difference,
+    };
+  }
+
+  function renderCalculations() {
+    const totals = calculateTotals();
+
     // Set text contents
     document.getElementById("recon-sales-total")!.textContent =
-      `S/. ${salesTotal.toFixed(2)}`;
+      `S/. ${totals.salesTotal.toFixed(2)}`;
     document.getElementById("recon-bank-total")!.textContent =
-      `S/. ${bankTotal.toFixed(2)}`;
+      `S/. ${totals.bankTotal.toFixed(2)}`;
     document.getElementById("recon-credit-total")!.textContent =
-      `S/. ${creditTotal.toFixed(2)}`;
+      `S/. ${totals.creditTotal.toFixed(2)}`;
     document.getElementById("recon-expected-cash")!.textContent =
-      `S/. ${expectedCash.toFixed(2)}`;
+      `S/. ${totals.expectedCash.toFixed(2)}`;
     document.getElementById("recon-physical-cash")!.textContent =
-      `S/. ${actualCash.toFixed(2)}`;
+      `S/. ${totals.actualCash.toFixed(2)}`;
     document.getElementById("recon-actual-total")!.textContent =
-      `S/. ${actualTotal.toFixed(2)}`;
+      `S/. ${totals.actualTotal.toFixed(2)}`;
 
     // Set loaded panel state visible
     document.getElementById("recon-unloaded-state")!.classList.add("hidden");
@@ -1223,22 +1539,22 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
     // Tolerance range (e.g. S/. 0.01 for rounding issues)
     const threshold = 0.015;
 
-    if (Math.abs(difference) <= threshold) {
+    if (Math.abs(totals.difference) <= threshold) {
       statusCard.classList.add("perfect");
       statusTitle.textContent = "Caja Cuadrada";
       statusDiff.textContent = "S/. 0.00";
       statusDesc.textContent =
         "El conteo físico de dinero coincide plenamente con las ventas del día.";
-    } else if (difference > 0) {
+    } else if (totals.difference > 0) {
       statusCard.classList.add("sobra");
       statusTitle.textContent = "Sobrante de Caja";
-      statusDiff.textContent = `S/. +${difference.toFixed(2)}`;
+      statusDiff.textContent = `S/. +${totals.difference.toFixed(2)}`;
       statusDesc.textContent =
         "Se ha recaudado más dinero en caja que el registrado por las ventas teóricas.";
     } else {
       statusCard.classList.add("falta");
       statusTitle.textContent = "Faltante de Caja";
-      statusDiff.textContent = `S/. ${difference.toFixed(2)}`;
+      statusDiff.textContent = `S/. ${totals.difference.toFixed(2)}`;
       statusDesc.textContent =
         "Existe un déficit de dinero recaudado frente a las ventas teóricas del reporte.";
     }
@@ -1246,55 +1562,12 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
 
   // --- EXPORT TO EXCEL ---
   exportExcelBtn.addEventListener("click", () => {
-    // Get totals
-    const sumNvs = state.documents
-      .filter((d) => d.type === "NV")
-      .reduce(
-        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
-        0,
-      );
-    const sumBoletas = state.documents
-      .filter(
-        (d) =>
-          d.type === "BOLETA" ||
-          (d.type === "NC" && d.serie.toUpperCase().startsWith("B")),
-      )
-      .reduce(
-        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
-        0,
-      );
-    const sumFacturas = state.documents
-      .filter(
-        (d) =>
-          d.type === "FACTURA" ||
-          (d.type === "NC" && d.serie.toUpperCase().startsWith("F")),
-      )
-      .reduce(
-        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
-        0,
-      );
+    // Sort bank transfers by date ascending, then time ascending
+    state.bankTransfers = sortBankTransfers(state.bankTransfers);
+    renderBankTransfers();
+    saveStateToStorage();
 
-    const salesTotal = sumNvs + sumBoletas + sumFacturas;
-
-    // Bank BCP is the sum of transfers table!
-    const bankTotal = state.bankTransfers.reduce(
-      (acc, t) => (t.type === "NC" ? acc - t.importe : acc + t.importe),
-      0,
-    );
-
-    const creditTotal = state.documents
-      .filter((d) => d.metodoPago === "credito")
-      .reduce(
-        (acc, d) => (d.type === "NC" ? acc - d.importe : acc + d.importe),
-        0,
-      );
-    const adjTotal = state.cashAdjustments.reduce(
-      (acc, adj) => acc + adj.amount,
-      0,
-    );
-    const expectedCash = salesTotal - bankTotal - creditTotal + adjTotal;
-    const actualCash = state.cashCount.reduce((acc, c) => acc + c.total, 0);
-    const difference = actualCash - expectedCash;
+    const totals = calculateTotals();
 
     exportToExcel({
       date: state.date,
@@ -1303,11 +1576,55 @@ import NewDocumentModal from "../components/NewDocumentModal.astro";
       cashCount: state.cashCount,
       cashAdjustments: state.cashAdjustments,
       totals: {
-        salesTotal,
-        bankTotal,
-        cashTotal: actualCash,
-        difference,
+        salesTotal: totals.salesTotal,
+        bankTotal: totals.bankTotal,
+        cashTotal: totals.actualCash,
+        difference: totals.difference,
       },
     });
   });
+
+  // --- EXPORT TO PDF ---
+  exportPdfBtn?.addEventListener("click", () => {
+    // Sort bank transfers by date ascending, then time ascending
+    state.bankTransfers = sortBankTransfers(state.bankTransfers);
+    renderBankTransfers();
+    saveStateToStorage();
+
+    const totals = calculateTotals();
+
+    exportToPdf({
+      date: state.date,
+      documents: state.documents,
+      bankTransfers: state.bankTransfers,
+      cashCount: state.cashCount,
+      cashAdjustments: state.cashAdjustments,
+      totals: {
+        salesTotal: totals.salesTotal,
+        bankTotal: totals.bankTotal,
+        cashTotal: totals.actualCash,
+        difference: totals.difference,
+      },
+    });
+  });
+
+  // --- RESTORE PERSISTED STATE ON INITIAL LOAD ---
+  if (loadStateFromStorage()) {
+    dropzone.classList.add("hidden");
+    welcomePanel.classList.add("hidden");
+    loadingIndicator.classList.add("hidden");
+
+    fileNameSpan.textContent = state.fileName;
+    const options: Intl.DateTimeFormatOptions = {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    };
+    fileDateSpan.textContent = `Reporte del: ${state.date.toLocaleDateString("es-PE", options)}`;
+
+    fileBadge.classList.remove("hidden");
+    workspaceArea.classList.remove("hidden");
+
+    renderWorkspace();
+  }
 </script>

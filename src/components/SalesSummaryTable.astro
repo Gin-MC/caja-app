@@ -39,15 +39,16 @@
         <table>
           <thead>
             <tr>
-              <th class="text-center">Nro. Doc</th>
-              <th class="text-right">Monto</th>
-              <th class="text-center">Método Pago</th>
-              <th class="text-center" style="width: 40px;">Acciones</th>
+              <th class="text-center" style="width: 70px;">Nro. Doc</th>
+              <th class="text-right" style="width: 80px;">Monto</th>
+              <th class="text-center" style="width: 85px;">Pago</th>
+              <th class="text-center" style="width: 110px;">Condición</th>
+              <th class="text-center" style="width: 36px;">Acciones</th>
             </tr>
           </thead>
           <tbody id="tbody-nv">
             <tr>
-              <td colspan="4" class="empty-state"
+              <td colspan="5" class="empty-state"
                 >No hay comprobantes cargados</td
               >
             </tr>
@@ -70,15 +71,16 @@
         <table>
           <thead>
             <tr>
-              <th class="text-center">Nro. Doc</th>
-              <th class="text-right">Monto</th>
-              <th class="text-center">Método Pago</th>
-              <th class="text-center" style="width: 40px;">Acciones</th>
+              <th class="text-center" style="width: 70px;">Nro. Doc</th>
+              <th class="text-right" style="width: 80px;">Monto</th>
+              <th class="text-center" style="width: 85px;">Pago</th>
+              <th class="text-center" style="width: 110px;">Condición</th>
+              <th class="text-center" style="width: 36px;">Acciones</th>
             </tr>
           </thead>
           <tbody id="tbody-boleta">
             <tr>
-              <td colspan="4" class="empty-state"
+              <td colspan="5" class="empty-state"
                 >No hay comprobantes cargados</td
               >
             </tr>
@@ -101,15 +103,16 @@
         <table>
           <thead>
             <tr>
-              <th class="text-center">Nro. Doc</th>
-              <th class="text-right">Monto</th>
-              <th class="text-center">Método Pago</th>
-              <th class="text-center" style="width: 40px;">Acciones</th>
+              <th class="text-center" style="width: 70px;">Nro. Doc</th>
+              <th class="text-right" style="width: 80px;">Monto</th>
+              <th class="text-center" style="width: 85px;">Pago</th>
+              <th class="text-center" style="width: 110px;">Condición</th>
+              <th class="text-center" style="width: 36px;">Acciones</th>
             </tr>
           </thead>
           <tbody id="tbody-factura">
             <tr>
-              <td colspan="4" class="empty-state"
+              <td colspan="5" class="empty-state"
                 >No hay comprobantes cargados</td
               >
             </tr>
@@ -155,6 +158,32 @@
   tr.payment-nc td.doc-num {
     color: #c0392b !important;
     font-weight: 700;
+  }
+
+  tr.payment-anulado td {
+    background-color: #f8f9f9 !important;
+    color: #95a5a6 !important;
+  }
+
+  tr.payment-anulado td.doc-num {
+    color: #7f8c8d !important;
+    text-decoration: line-through;
+  }
+
+  tr.payment-otra-fecha td {
+    background-color: #f5eef8 !important; /* Soft lavender purple */
+    color: #6c3483 !important;
+  }
+
+  tr.payment-otra-fecha td.doc-num {
+    color: #512e5f !important;
+    font-weight: 700;
+  }
+
+  tr.payment-otra-fecha .doc-amount-input {
+    color: #6c3483 !important;
+    background-color: #fbf6fc !important;
+    border-color: #e8daef !important;
   }
 </style>
 
@@ -322,12 +351,28 @@
     border-color: #fadbd8;
   }
 
-  .sales-summary-container .payment-select {
-    padding: 0.35rem 0.5rem;
+  /* Anulado voucher styling */
+  .sales-summary-container tr.payment-anulado td {
+    background-color: #f8f9fa;
+    color: #95a5a6;
+  }
+  .sales-summary-container tr.payment-anulado .doc-num {
+    text-decoration: line-through;
+    color: #95a5a6;
+  }
+  .sales-summary-container tr.payment-anulado .doc-amount-input {
+    text-decoration: line-through;
+    color: #95a5a6;
+    background-color: #f2f3f4;
+  }
+
+  /* Condición select dropdown */
+  .sales-summary-container .condicion-select {
+    padding: 0.35rem 0.4rem;
     border-radius: 8px;
     border: 1px solid var(--color-border);
     font-family: var(--font-primary);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 600;
     outline: none;
     background-color: var(--color-cream);
@@ -337,20 +382,162 @@
     text-align: center;
   }
 
-  .sales-summary-container .payment-select:focus {
+  .sales-summary-container .condicion-select:focus {
     border-color: var(--color-orange);
   }
 
-  .sales-summary-container .payment-select.banco {
-    background-color: #ebf5fb;
-    color: #1f618d;
-    border-color: #aed6f1;
+  .sales-summary-container .condicion-select.normal {
+    background-color: var(--color-cream);
+    color: var(--color-dark);
   }
 
-  .sales-summary-container .payment-select.credito {
+  .sales-summary-container .condicion-select.credito {
     background-color: #fef9e7;
     color: #7d6608;
     border-color: #f9e79f;
+  }
+
+  .sales-summary-container .condicion-select.anulado {
+    background-color: #eaeded;
+    color: #7f8c8d;
+    border-color: #bdc3c7;
+    font-weight: 700;
+  }
+
+  .sales-summary-container .condicion-select.otra_fecha {
+    background-color: #f4ecf7;
+    color: #6c3483;
+    border-color: #d7bde2;
+    font-weight: 700;
+  }
+
+  .sales-summary-container .otra-fecha-picker-wrap {
+    margin-top: 0.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .sales-summary-container .otra-fecha-date-input {
+    width: 100%;
+    max-width: 120px;
+    padding: 0.2rem 0.3rem;
+    border-radius: 6px;
+    border: 1px solid #d7bde2;
+    font-family: var(--font-primary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #6c3483;
+    background-color: #ffffff;
+    outline: none;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(108, 52, 131, 0.08);
+    transition: var(--transition-smooth);
+    text-align: center;
+  }
+
+  .sales-summary-container .otra-fecha-date-input:focus {
+    border-color: #8e44ad;
+    box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.15);
+  }
+
+  /* 1-click Payment Switch (Efectivo / Banco) */
+  .sales-summary-container .pay-switch-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sales-summary-container .pay-switch {
+    position: relative;
+    display: inline-block;
+    width: 76px;
+    height: 26px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .sales-summary-container .pay-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .sales-summary-container .pay-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #e8f8f5;
+    border: 1px solid #a3e4d7;
+    border-radius: 13px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+  }
+
+  .sales-summary-container .pay-slider::before {
+    content: "";
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 2px;
+    bottom: 2px;
+    background-color: #27ae60;
+    border-radius: 50%;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    z-index: 2;
+  }
+
+  .sales-summary-container .pay-label-efec,
+  .sales-summary-container .pay-label-banco {
+    position: absolute;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    z-index: 1;
+    transition: opacity 0.2s ease;
+  }
+
+  .sales-summary-container .pay-label-efec {
+    right: 7px;
+    color: #196f3d;
+  }
+
+  .sales-summary-container .pay-label-banco {
+    left: 7px;
+    color: #1b4f72;
+    opacity: 0;
+  }
+
+  .sales-summary-container .pay-switch input:checked + .pay-slider {
+    background-color: #ebf5fb;
+    border-color: #aed6f1;
+  }
+
+  .sales-summary-container .pay-switch input:checked + .pay-slider::before {
+    transform: translateX(50px);
+    background-color: #2980b9;
+  }
+
+  .sales-summary-container .pay-switch input:checked + .pay-slider .pay-label-efec {
+    opacity: 0;
+  }
+
+  .sales-summary-container .pay-switch input:checked + .pay-slider .pay-label-banco {
+    opacity: 1;
+  }
+
+  .sales-summary-container .pay-switch.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
   }
 
   .sales-summary-container .action-buttons {

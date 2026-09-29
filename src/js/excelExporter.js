@@ -1,4 +1,25 @@
 import XLSX from 'xlsx-js-style';
+import { sortBankTransfers } from './bankSorter.js';
+
+/**
+ * Formats a date string (YYYY-MM-DD) or text to DD/MM/YYYY for Excel export
+ */
+export function formatOtraFecha(val, reportDate) {
+  if (!val || String(val).trim() === '') {
+    const d = new Date(reportDate || new Date());
+    d.setDate(d.getDate() - 1);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  const s = String(val).trim();
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    return `${ymd[3]}/${ymd[2]}/${ymd[1]}`;
+  }
+  return s;
+}
 
 /**
  * Exports the session data into a styled two-sheet Excel file matching Plastiluz's original structure.
@@ -26,6 +47,7 @@ export function exportToExcel(session) {
   const fillBCP = { fgColor: { rgb: 'D4E6F1' } }; // Soft blue for banco
   const fillCredit = { fgColor: { rgb: 'FCF3CF' } }; // Soft yellow for credito
   const fillNC = { fgColor: { rgb: 'FADBD8' } }; // Soft red for notas de credito
+  const fillOtraFecha = { fgColor: { rgb: 'EBDEF0' } }; // Soft purple for otra fecha
 
   // --- SHEET 1: caja ---
   const cajaRows = [];
@@ -65,6 +87,16 @@ export function exportToExcel(session) {
   let sumBoletas = 0;
   let sumFacturas = 0;
 
+  // Helper to resolve document status flags
+  const checkDocStatus = (doc) => {
+    if (!doc) return null;
+    const isAnulado = doc.condicion === 'anulado' || doc.metodoPago === 'anulado';
+    const isOtraFecha = doc.condicion === 'otra_fecha';
+    const isCredito = doc.condicion === 'credito' || doc.metodoPago === 'credito';
+    const isBanco = doc.metodoPago === 'banco' && !isAnulado && !isOtraFecha && !isCredito;
+    return { isAnulado, isOtraFecha, isCredito, isBanco };
+  };
+
   // Add items
   for (let i = 0; i < maxLen; i++) {
     const nv = nvs[i] || null;
@@ -75,10 +107,27 @@ export function exportToExcel(session) {
     
     // Ventas S/Doc (Col A: indicator, Col B: number, Col C: amount)
     if (nv) {
-      row[0] = nv.metodoPago === 'banco' ? '(*)' : (nv.metodoPago === 'credito' ? nv.importe : null); // Col A
-      row[1] = nv.numero; // Col B
-      row[2] = nv.metodoPago === 'credito' ? 'credito' : nv.importe; // Col C
-      sumNvs += nv.importe;
+      const st = checkDocStatus(nv);
+      if (st.isAnulado) {
+        row[0] = null;
+        row[1] = nv.numero;
+        row[2] = 'ANULADO';
+      } else if (st.isOtraFecha) {
+        row[0] = null; // No indicator
+        row[1] = nv.numero; // Only number
+        row[2] = formatOtraFecha(nv.fechaOtra, date); // Date goes in amount cell
+        // Do NOT add to sumNvs
+      } else if (st.isCredito) {
+        row[0] = nv.importe;
+        row[1] = nv.numero;
+        row[2] = 'credito';
+        sumNvs += nv.importe;
+      } else {
+        row[0] = st.isBanco ? '(*)' : null;
+        row[1] = nv.numero;
+        row[2] = nv.importe;
+        sumNvs += nv.importe;
+      }
     } else {
       row[0] = null;
       row[1] = null;
@@ -89,11 +138,36 @@ export function exportToExcel(session) {
 
     // Boletas (Col E: indicator, Col F: number, Col G: amount)
     if (bol) {
-      row[4] = bol.type === 'NC' ? 'NC' : (bol.metodoPago === 'banco' ? '(*)' : (bol.metodoPago === 'credito' ? (bol.type === 'NC' ? -bol.importe : bol.importe) : null)); // Col E
-      row[5] = bol.type === 'NC' ? `${bol.serie}-${bol.numero}` : bol.numero; // Col F
-      const val = bol.type === 'NC' ? -bol.importe : bol.importe;
-      row[6] = bol.metodoPago === 'credito' ? 'credito' : val; // Col G
-      sumBoletas += val;
+      const st = checkDocStatus(bol);
+      const isNC = bol.type === 'NC';
+      const val = isNC ? -bol.importe : bol.importe;
+      const docNumDisplay = isNC ? `${bol.serie}-${bol.numero}` : bol.numero;
+
+      if (st.isAnulado) {
+        row[4] = null;
+        row[5] = bol.numero;
+        row[6] = 'ANULADO';
+      } else if (st.isOtraFecha) {
+        row[4] = null; // No indicator
+        row[5] = bol.numero; // Only number as requested
+        row[6] = formatOtraFecha(bol.fechaOtra, date); // Date goes in amount cell
+        // Do NOT add to sumBoletas
+      } else if (isNC) {
+        row[4] = 'NC';
+        row[5] = docNumDisplay;
+        row[6] = val;
+        sumBoletas += val;
+      } else if (st.isCredito) {
+        row[4] = val;
+        row[5] = docNumDisplay;
+        row[6] = 'credito';
+        sumBoletas += val;
+      } else {
+        row[4] = st.isBanco ? '(*)' : null;
+        row[5] = docNumDisplay;
+        row[6] = val;
+        sumBoletas += val;
+      }
     } else {
       row[4] = null;
       row[5] = null;
@@ -104,11 +178,36 @@ export function exportToExcel(session) {
 
     // Facturas (Col I: indicator, Col J: number, Col K: amount)
     if (fac) {
-      row[8] = fac.type === 'NC' ? 'NC' : (fac.metodoPago === 'banco' ? '(*)' : (fac.metodoPago === 'credito' ? (fac.type === 'NC' ? -fac.importe : fac.importe) : null)); // Col I
-      row[9] = fac.type === 'NC' ? `${fac.serie}-${fac.numero}` : fac.numero; // Col J
-      const val = fac.type === 'NC' ? -fac.importe : fac.importe;
-      row[10] = fac.metodoPago === 'credito' ? 'credito' : val; // Col K
-      sumFacturas += val;
+      const st = checkDocStatus(fac);
+      const isNC = fac.type === 'NC';
+      const val = isNC ? -fac.importe : fac.importe;
+      const docNumDisplay = isNC ? `${fac.serie}-${fac.numero}` : fac.numero;
+
+      if (st.isAnulado) {
+        row[8] = null;
+        row[9] = fac.numero;
+        row[10] = 'ANULADO';
+      } else if (st.isOtraFecha) {
+        row[8] = null; // No indicator
+        row[9] = fac.numero; // Only number as requested
+        row[10] = formatOtraFecha(fac.fechaOtra, date); // Date goes in amount cell
+        // Do NOT add to sumFacturas
+      } else if (isNC) {
+        row[8] = 'NC';
+        row[9] = docNumDisplay;
+        row[10] = val;
+        sumFacturas += val;
+      } else if (st.isCredito) {
+        row[8] = val;
+        row[9] = docNumDisplay;
+        row[10] = 'credito';
+        sumFacturas += val;
+      } else {
+        row[8] = st.isBanco ? '(*)' : null;
+        row[9] = docNumDisplay;
+        row[10] = val;
+        sumFacturas += val;
+      }
     } else {
       row[8] = null;
       row[9] = null;
@@ -129,7 +228,7 @@ export function exportToExcel(session) {
   cajaRows.push([]);
   
   // Small Ventas a Crédito Table pushed to Column I & J below document totals
-  const creditDocs = documents.filter(d => d.metodoPago === 'credito');
+  const creditDocs = documents.filter(d => (d.condicion === 'credito' || d.metodoPago === 'credito') && d.condicion !== 'anulado' && d.condicion !== 'otra_fecha');
   
   const rowCrdTitle = [];
   rowCrdTitle[8] = 'VENTAS A CRÉDITO';
@@ -209,16 +308,20 @@ export function exportToExcel(session) {
   cajaRows.push([]); // spacer
 
   // Row 7: sobra/falta
+  const creditTotal = creditDocs.reduce((acc, d) => d.type === 'NC' ? acc - d.importe : acc + d.importe, 0);
+  const expectedCash = salesTotal - totals.bankTotal - creditTotal + adjTotal;
+  const calculatedDiff = totals.cashTotal - expectedCash;
+
   const rowSobraFalta = [];
   rowSobraFalta[2] = 'sobra/falta';
-  rowSobraFalta[6] = totals.difference;
+  rowSobraFalta[6] = typeof totals.difference === 'number' ? totals.difference : calculatedDiff;
   cajaRows.push(rowSobraFalta);
 
   // Convert array to worksheet
   const cajaSheet = XLSX.utils.aoa_to_sheet(cajaRows);
 
-  // Apply Styling for 'caja' Sheet
-  cajaSheet['!views'] = [{ showGridLines: true }];
+  // Apply Styling for 'caja' Sheet (Include workbookViewId to eliminate Excel XML schema warnings)
+  cajaSheet['!views'] = [{ workbookViewId: 0, showGridLines: true }];
   
   // Format Date in Row 1 (cell F1 is column index 5, row index 0)
   const cellF1 = cajaSheet['F1'];
@@ -286,6 +389,14 @@ export function exportToExcel(session) {
         } else if (cell.v === 'NC') {
           cell.s.fill = fillNC;
           cell.s.font.color = { rgb: '78281F' };
+        } else if (cell.v === 'ANULADO') {
+          cell.s.fill = { fgColor: { rgb: 'F2F3F4' } };
+          cell.s.font = { name: 'Arial', sz: 9, bold: true, color: { rgb: '7F8C8D' } };
+          cell.s.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (cell.v === 'OTRA FECHA') {
+          cell.s.fill = fillOtraFecha;
+          cell.s.font = { name: 'Arial', sz: 8, bold: true, color: { rgb: '6C3483' } };
+          cell.s.alignment = { horizontal: 'center', vertical: 'center' };
         }
       }
 
@@ -307,6 +418,14 @@ export function exportToExcel(session) {
           cell.s.alignment = { horizontal: 'center', vertical: 'center' };
           cell.s.font = { name: 'Arial', sz: 10, bold: true, color: { rgb: '7E5109' } };
           cell.s.fill = fillCredit;
+        } else if (cell.v === 'ANULADO') {
+          cell.s.alignment = { horizontal: 'center', vertical: 'center' };
+          cell.s.font = { name: 'Arial', sz: 9, bold: true, color: { rgb: '7F8C8D' } };
+          cell.s.fill = { fgColor: { rgb: 'F2F3F4' } };
+        } else if (typeof cell.v === 'string') {
+          cell.s.alignment = { horizontal: 'center', vertical: 'center' };
+          cell.s.font = { name: 'Arial', sz: 9, bold: true, color: { rgb: '6C3483' } };
+          cell.s.fill = fillOtraFecha;
         } else {
           cell.s.alignment = { horizontal: 'right', vertical: 'center' };
           cell.s.font = { name: 'Arial', sz: 10, bold: true };
@@ -412,9 +531,12 @@ export function exportToExcel(session) {
   // Row 3: Headers
   bancoRows.push(['FECHA', 'HORA', '#OPERACIÓN ', 'TIPO', 'NRO.DOC', 'MONTO', 'VERIFICADO']);
 
+  // Sort bank transfers: Date ascending, then Time ascending
+  const sortedTransfers = sortBankTransfers(bankTransfers);
+
   let bankSum = 0;
-  bankTransfers.forEach(t => {
-    const actualAmt = t.type === 'NC' ? -t.importe : t.importe;
+  sortedTransfers.forEach(t => {
+    const actualAmt = t.type === 'NC' ? -Math.abs(t.importe) : t.importe;
     
     // Parse custom date strings or keep them
     bancoRows.push([
@@ -489,8 +611,8 @@ export function exportToExcel(session) {
 
   const bancoSheet = XLSX.utils.aoa_to_sheet(bancoRows);
 
-  // Apply bank sheet styles
-  bancoSheet['!views'] = [{ showGridLines: true }];
+  // Apply bank sheet styles (include workbookViewId to eliminate Excel XML schema warnings)
+  bancoSheet['!views'] = [{ workbookViewId: 0, showGridLines: true }];
 
   // Format Date in Row 1 (cell F1 is column index 5)
   const cellBankF1 = bancoSheet['F1'];
@@ -658,4 +780,5 @@ export function exportToExcel(session) {
   // Trigger download
   const dateStr = dateObj.toISOString().split('T')[0];
   XLSX.writeFile(wb, `CAJA_PLASTILUZ_${dateStr}.xlsx`);
+  return wb;
 }

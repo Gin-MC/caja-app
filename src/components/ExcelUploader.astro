@@ -36,7 +36,16 @@
         <span class="file-date" id="loaded-file-date">1 de Abril de 2026</span>
       </div>
     </div>
-    <button id="clear-file-btn" class="clear-btn" title="Cargar otro archivo">&times;</button>
+    <div class="badge-actions">
+      <button id="clear-all-data-btn" class="btn-clear-data" type="button" title="Limpiar toda la información y reiniciar">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+        Limpiar Información
+      </button>
+      <button id="clear-file-btn" class="clear-btn" title="Cargar otro archivo">&times;</button>
+    </div>
   </div>
 </div>
 
@@ -153,6 +162,36 @@
   .file-date {
     font-size: 0.78rem;
     color: var(--color-dark-muted);
+  }
+
+  .badge-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .btn-clear-data {
+    background-color: var(--color-error-bg);
+    color: var(--color-error);
+    border: 1px solid #F5B7B1;
+    border-radius: 10px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: var(--transition-smooth);
+    font-family: var(--font-primary);
+  }
+
+  .btn-clear-data:hover {
+    background-color: var(--color-error);
+    color: var(--color-white);
+    border-color: var(--color-error);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(192, 57, 43, 0.2);
   }
 
   .clear-btn {

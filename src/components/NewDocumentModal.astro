@@ -29,13 +29,29 @@
         <input type="number" id="doc-amount" step="0.01" min="0" placeholder="Ej: 158.70" required />
       </div>
 
-      <div class="form-group">
-        <label for="doc-payment">Método de Pago Inicial</label>
-        <select id="doc-payment">
-          <option value="efectivo">Efectivo</option>
-          <option value="banco">Banco BCP (Yape / Transferencia)</option>
-          <option value="credito">Crédito (Por Cobrar)</option>
-        </select>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="form-group">
+          <label for="doc-payment">Método de Pago</label>
+          <select id="doc-payment">
+            <option value="efectivo">Efectivo</option>
+            <option value="banco">Banco BCP (Yape / Transf.)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="doc-condicion">Condición / Estado</label>
+          <select id="doc-condicion">
+            <option value="normal">Normal (Cobrado hoy)</option>
+            <option value="credito">Crédito (Por cobrar)</option>
+            <option value="anulado">Anulado</option>
+            <option value="otra_fecha">Venta en otra fecha</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="new-doc-otra-fecha-group" class="form-group hidden">
+        <label for="doc-fecha-otra">Fecha Original de la Venta</label>
+        <input type="date" id="doc-fecha-otra" />
       </div>
 
       <div class="modal-actions">

@@ -14,8 +14,12 @@
       <p id="confirm-message">Esta acción modificará los datos de la caja diaria y requiere confirmación.</p>
     </div>
     <div class="modal-actions">
-      <button id="confirm-cancel-btn" class="btn btn-secondary">Cancelar</button>
-      <button id="confirm-ok-btn" class="btn btn-primary">Confirmar</button>
+      <button id="confirm-cancel-btn" class="btn btn-secondary" type="button">
+        Cancelar <span class="key-hint">Esc</span>
+      </button>
+      <button id="confirm-ok-btn" class="btn btn-primary" type="button">
+        Confirmar <span class="key-hint primary">↵ Enter</span>
+      </button>
     </div>
   </div>
 </div>
@@ -119,6 +123,23 @@
     background-color: var(--color-orange-hover);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(230, 126, 34, 0.2);
+  }
+
+  .key-hint {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.15rem 0.4rem;
+    border-radius: 5px;
+    background-color: rgba(43, 37, 33, 0.1);
+    color: var(--color-dark-muted);
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }
+
+  .key-hint.primary {
+    background-color: rgba(255, 255, 255, 0.25);
+    color: var(--color-white);
   }
 
   .hidden {
